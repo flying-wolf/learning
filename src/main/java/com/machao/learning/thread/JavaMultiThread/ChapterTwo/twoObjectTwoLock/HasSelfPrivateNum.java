@@ -1,4 +1,4 @@
-package com.machao.learning.thread.JavaMultiThread.ChapterTwo.t2;
+package com.machao.learning.thread.JavaMultiThread.ChapterTwo.twoObjectTwoLock;
 
 public class HasSelfPrivateNum {
 	private int num = 0;
