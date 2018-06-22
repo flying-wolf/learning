@@ -1,23 +1,23 @@
-##1.数据结构
-ConcurrentHashMap底层结构为数组+链表+红黑树
+## 数据结构
+> ConcurrentHashMap底层结构为数组+链表+红黑树
 
-##2.并发
-ConcurrentHashMap是线程安全的,内部通过CAS算法(无锁操作)实现线程安全
-通过CAS操作实现了3种原子性操作方法
-通过synchronized给头结点加锁，相比较之前版本减小了锁的粒度，减少了冲突与性能消耗
-CAS + synchronized保证线程安全
+## 并发
+1. ConcurrentHashMap是线程安全的,内部通过CAS算法(无锁操作)实现线程安全
+2. 通过CAS操作实现了3种原子性操作方法
+3. 通过synchronized给头结点加锁，相比较之前版本减小了锁的粒度，减少了冲突与性能消耗
+4. CAS + synchronized保证线程安全
 
-##3.效率
+## 效率
 
-##4.重要属性
-table:默认为null,初始化发生在第一次插入操作，默认大小为16的数组，用了储存Node节点数据，扩容时总会时2的幂次方；
-nextTable：默认为null，扩容时新生成的数组，其大小会是原数组的2倍。
-sizeCtl：默认为0，用来控制table的初始化和扩容操作
-        -1代表table正在初始化
-        -N代表有N-1个线程正在进行扩容操作
-        其余情况：
-                如果table未初始化，则代表table需要初始化的大小
-                如果table初始化完成，则代表table的容量，默认时table大小的0.75倍
+## 重要属性
+1. table:默认为null,初始化发生在第一次插入操作，默认大小为16的数组，用了储存Node节点数据，扩容时总会时2的幂次方；
+2. nextTable：默认为null，扩容时新生成的数组，其大小会是原数组的2倍。
+3. sizeCtl：默认为0，用来控制table的初始化和扩容操作
+	- -1代表table正在初始化
+	- -N代表有N-1个线程正在进行扩容操作
+	- 其余情况：
+		- 如果table未初始化，则代表table需要初始化的大小
+		- 如果table初始化完成，则代表table的容量，默认时table大小的0.75倍
 
 
 
@@ -43,7 +43,7 @@ static final int MOVED     = -1; // MOVED表示该节点是个forwarding Node，
 static final int TREEBIN   = -2;//表示判断到这个节点是一个树节点
 
 
-##5.重要方法
+## 5.重要方法
  private final Node<K,V>[] initTable()//table初始化方法
 根据声明的table容量初始化table，默认大小为16，确保table的大小为2的幂次方
 第一次put操作时进行，且只会执行一次
@@ -99,7 +99,7 @@ baseCounter和数组里每个CounterCell的值之和
 
 
 
-##6.重要内部类
+## 6.重要内部类
 static class Node<K,V> implements Map.Entry<K,V>
 储存链表节点的数据结构，其中value和next属性使用volatile修饰，保证线程可见性
 setValue方法直接抛出异常，不允许直接修改value的值
@@ -128,7 +128,7 @@ static final class ForwardingNode<K,V> extends Node<K,V>
 
 
 
-##7.jdk1.7与1.8之间的不同
+## 7.jdk1.7与1.8之间的不同
 同步机制：
 1.7：分段锁，每个segment继承ReentrantLock
 1.8：CAS+synchronize保证并发更新
@@ -145,5 +145,5 @@ size实现：
 
 
 
-##8.ConcurrentHashMap能完全代替HashTable吗？
+## 8.ConcurrentHashMap能完全代替HashTable吗？
 hashTablb的迭代器时强一致性的，而ConcurrentHashMap的迭代器时弱一致性的
