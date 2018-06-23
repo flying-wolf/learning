@@ -10,7 +10,7 @@
 - 同步：Java中的同步是指通过人为的控制和调度，保证共享资源的多线程访问成为线程安全，来保证结果的准确。
 
 ## 线程的状态
-``` 
+```Java 
 public enum State {
         /**
          * Thread state for a thread which has not yet started.
