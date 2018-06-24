@@ -1,6 +1,6 @@
 package com.machao.learning.thread.JavaMultiThread.ChapterTwo.throwExceptionNoLock;
 
-public class Run {
+public class Test {
 
 	public static void main(String[] args) {
 		try {
