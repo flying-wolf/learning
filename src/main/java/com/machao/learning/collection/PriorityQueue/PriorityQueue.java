@@ -188,6 +188,18 @@ public class PriorityQueue<E> extends AbstractQueue<E>
     }
 
     /**
+     * Creates a {@code PriorityQueue} containing the elements in the
+     * specified priority queue.  This priority queue will be
+     * ordered according to the same ordering as the given priority
+     * queue.
+     *
+     * @param  c the priority queue whose elements are to be placed
+     *         into this priority queue
+     * @throws ClassCastException if elements of {@code c} cannot be
+     *         compared to one another according to {@code c}'s
+     *         ordering
+     * @throws NullPointerException if the specified priority queue or any
+     *         of its elements are null
      */
     @SuppressWarnings("unchecked")
     public PriorityQueue(PriorityQueue<? extends E> c) {
