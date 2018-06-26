@@ -101,12 +101,7 @@ public class PriorityQueue<E> extends AbstractQueue<E>
     private static final int DEFAULT_INITIAL_CAPACITY = 11;
 
     /**
-     * Priority queue represented as a balanced binary heap: the two
-     * children of queue[n] are queue[2*n+1] and queue[2*(n+1)].  The
-     * priority queue is ordered by comparator, or by the elements'
-     * natural ordering, if comparator is null: For each node n in the
-     * heap and each descendant d of n, n <= d.  The element with the
-     * lowest value is in queue[0], assuming the queue is nonempty.
+     * 用于储存元素的数组
      */
     transient Object[] queue; // non-private to simplify nested class access
 
@@ -116,46 +111,34 @@ public class PriorityQueue<E> extends AbstractQueue<E>
     private int size = 0;
 
     /**
-     * The comparator, or null if priority queue uses elements'
-     * natural ordering.
+     * 比较器
      */
     private final Comparator<? super E> comparator;
 
     /**
-     * The number of times this priority queue has been
-     * <i>structurally modified</i>.  See AbstractList for gory details.
+     * 此优先级队列结构修改次数
      */
     transient int modCount = 0; // non-private to simplify nested class access
 
     /**
-     * Creates a {@code PriorityQueue} with the default initial
-     * capacity (11) that orders its elements according to their
-     * {@linkplain Comparable natural ordering}.
+     * 创建一个默认容量11的优先队列
+     * 其元素根据默认的比较器自然排序
      */
     public PriorityQueue() {
         this(DEFAULT_INITIAL_CAPACITY, null);
     }
 
     /**
-     * Creates a {@code PriorityQueue} with the specified initial
-     * capacity that orders its elements according to their
-     * {@linkplain Comparable natural ordering}.
-     *
-     * @param initialCapacity the initial capacity for this priority queue
-     * @throws IllegalArgumentException if {@code initialCapacity} is less
-     *         than 1
+     * 创建一个指定容量的优先队列
+     * 其元素根据默认的比较器进行自然排序
      */
     public PriorityQueue(int initialCapacity) {
         this(initialCapacity, null);
     }
 
     /**
-     * Creates a {@code PriorityQueue} with the default initial capacity and
-     * whose elements are ordered according to the specified comparator.
-     *
-     * @param  comparator the comparator that will be used to order this
-     *         priority queue.  If {@code null}, the {@linkplain Comparable
-     *         natural ordering} of the elements will be used.
+     * 创建一个初始容量为默认值11的优先队列
+     * 其元素根据指定的比较器进行排序
      * @since 1.8
      */
     public PriorityQueue(Comparator<? super E> comparator) {
@@ -163,73 +146,48 @@ public class PriorityQueue<E> extends AbstractQueue<E>
     }
 
     /**
-     * Creates a {@code PriorityQueue} with the specified initial capacity
-     * that orders its elements according to the specified comparator.
-     *
-     * @param  initialCapacity the initial capacity for this priority queue
-     * @param  comparator the comparator that will be used to order this
-     *         priority queue.  If {@code null}, the {@linkplain Comparable
-     *         natural ordering} of the elements will be used.
-     * @throws IllegalArgumentException if {@code initialCapacity} is
-     *         less than 1
+     * 创建一个指定容量的优先队列
+     * 其元素根据指定的比较器排序
      */
     public PriorityQueue(int initialCapacity,
                          Comparator<? super E> comparator) {
-        // Note: This restriction of at least one is not actually needed,
-        // but continues for 1.5 compatibility
+        // 初始容量小于1 抛出异常
         if (initialCapacity < 1)
             throw new IllegalArgumentException();
+        // 初始化数组
         this.queue = new Object[initialCapacity];
+        // 设置比较器
         this.comparator = comparator;
     }
 
     /**
-     * Creates a {@code PriorityQueue} containing the elements in the
-     * specified collection.  If the specified collection is an instance of
-     * a {@link SortedSet} or is another {@code PriorityQueue}, this
-     * priority queue will be ordered according to the same ordering.
-     * Otherwise, this priority queue will be ordered according to the
-     * {@linkplain Comparable natural ordering} of its elements.
-     *
-     * @param  c the collection whose elements are to be placed
-     *         into this priority queue
-     * @throws ClassCastException if elements of the specified collection
-     *         cannot be compared to one another according to the priority
-     *         queue's ordering
-     * @throws NullPointerException if the specified collection or any
-     *         of its elements are null
+     * 创建一个包含指定集合元素的优先队列
+     * 如果指定集合为SortedSet或另一个PriorityQueue
+     * 那么这个优先级队列按照相同的顺序排序
+     * 否则元素按照自然顺序排序
      */
     @SuppressWarnings("unchecked")
     public PriorityQueue(Collection<? extends E> c) {
         if (c instanceof SortedSet<?>) {
+        	// 指定集合是一个SortedSet
             SortedSet<? extends E> ss = (SortedSet<? extends E>) c;
             this.comparator = (Comparator<? super E>) ss.comparator();
             initElementsFromCollection(ss);
         }
         else if (c instanceof PriorityQueue<?>) {
+        	// 指定集合是一个priorityQueue
             PriorityQueue<? extends E> pq = (PriorityQueue<? extends E>) c;
             this.comparator = (Comparator<? super E>) pq.comparator();
             initFromPriorityQueue(pq);
         }
         else {
+        	// 其它类型集合
             this.comparator = null;
             initFromCollection(c);
         }
     }
 
     /**
-     * Creates a {@code PriorityQueue} containing the elements in the
-     * specified priority queue.  This priority queue will be
-     * ordered according to the same ordering as the given priority
-     * queue.
-     *
-     * @param  c the priority queue whose elements are to be placed
-     *         into this priority queue
-     * @throws ClassCastException if elements of {@code c} cannot be
-     *         compared to one another according to {@code c}'s
-     *         ordering
-     * @throws NullPointerException if the specified priority queue or any
-     *         of its elements are null
      */
     @SuppressWarnings("unchecked")
     public PriorityQueue(PriorityQueue<? extends E> c) {
