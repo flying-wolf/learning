@@ -273,14 +273,16 @@ public class PriorityQueue<E> extends AbstractQueue<E>
      * @param minCapacity the desired minimum capacity
      */
     private void grow(int minCapacity) {
+    	// 获取queue数组容量
         int oldCapacity = queue.length;
-        // Double size if small; else grow by 50%
+        // 如果当前容量小于64，则容量增加一倍加2，否则增长50%
         int newCapacity = oldCapacity + ((oldCapacity < 64) ?
                                          (oldCapacity + 2) :
                                          (oldCapacity >> 1));
         // overflow-conscious code
         if (newCapacity - MAX_ARRAY_SIZE > 0)
             newCapacity = hugeCapacity(minCapacity);
+        // 以复制的方式将原来数组元素复制给新的数组
         queue = Arrays.copyOf(queue, newCapacity);
     }
 
@@ -315,16 +317,18 @@ public class PriorityQueue<E> extends AbstractQueue<E>
      * @throws NullPointerException if the specified element is null
      */
     public boolean offer(E e) {
+    	// 不允许null,否则抛出异常
         if (e == null)
             throw new NullPointerException();
         modCount++;
         int i = size;
+        // 检查如果数组容量已满调用grow方法扩容
         if (i >= queue.length)
             grow(i + 1);
         size = i + 1;
-        if (i == 0)
+        if (i == 0)// 当前队列为空，直接插入到queue[0]的位置
             queue[0] = e;
-        else
+        else// 将元素直接“放到”一个有效位置上，然后调整，不断上浮
             siftUp(i, e);
         return true;
     }
@@ -561,20 +565,26 @@ public class PriorityQueue<E> extends AbstractQueue<E>
      */
     public void clear() {
         modCount++;
+        // 清除数组所有元素的引用
         for (int i = 0; i < size; i++)
             queue[i] = null;
+        // 数组大小为0
         size = 0;
     }
 
     @SuppressWarnings("unchecked")
     public E poll() {
+    	// 如果数组为空，返回null
         if (size == 0)
             return null;
+        // 容量计数调整
         int s = --size;
         modCount++;
+        // 取出堆顶元素
         E result = (E) queue[0];
         E x = (E) queue[s];
         queue[s] = null;
+        // 将最后一个元素暂时放到堆顶位置，然后调整堆顶元素，下移
         if (s != 0)
             siftDown(0, x);
         return result;
@@ -716,6 +726,7 @@ public class PriorityQueue<E> extends AbstractQueue<E>
      */
     @SuppressWarnings("unchecked")
     private void heapify() {
+    	// 从n/2-1处开始到0，不停的调整堆，成为小顶堆。调用siftDown构建小顶堆，siftDown字面意思是向下筛选，就是从父节点开始向左右节点找最小值。
         for (int i = (size >>> 1) - 1; i >= 0; i--)
             siftDown(i, (E) queue[i]);
     }
