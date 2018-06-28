@@ -1,4 +1,5 @@
-package com.machao.learning.collection.PriorityQueue;
+package com.machao.learning.concurrent.PriorityQueue;
+
 
 import java.util.AbstractQueue;
 import java.util.ArrayDeque;
