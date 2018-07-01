@@ -1,4 +1,4 @@
-package wait_notify_size5;
+package com.machao.learning.thread.JavaMultiThread.ChapterThree.wait_notify_size5;
 
 import java.util.ArrayList;
 import java.util.List;
