@@ -2,14 +2,17 @@ package com.machao.learning.thread.JavaMultiThread.ChapterThree.firstNotify;
 
 public class MyRun {
 	private String lock = new String("");
+	private boolean isFirstRunB = false;
 	private Runnable runnableA = new Runnable() {
 		@Override
 		public void run() {
 			synchronized (lock) {
 				try {
-					System.out.println("begin wait");
-					lock.wait();
-					System.out.println("  end wait");
+					while(isFirstRunB == false) {
+						System.out.println("begin wait");
+						lock.wait();
+						System.out.println("  end wait");
+					}
 				} catch (InterruptedException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
@@ -26,6 +29,7 @@ public class MyRun {
 				System.out.println("begin notify");
 				lock.notify();
 				System.out.println("  end notify");
+				isFirstRunB = true;
 			}
 		}
 	};
@@ -33,11 +37,11 @@ public class MyRun {
 	public static void main(String[] args) {
 		try {
 			MyRun run = new MyRun();
-			Thread b = new Thread(run.runnableB);
-			b.start();
-			Thread.sleep(100);
 			Thread a = new Thread(run.runnableA);
 			a.start();
+			Thread.sleep(100);
+			Thread b = new Thread(run.runnableB);
+			b.start();
 		} catch (InterruptedException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
