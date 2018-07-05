@@ -38,13 +38,13 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
     /** 保存元素的queue数组 */
     final Object[] items;
 
-    /** items index for next take, poll, peek or remove */
+    /** 下一次take、poll、peek或remove操作的元素索引 */
     int takeIndex;
 
-    /** items index for next put, offer, or add */
+    /** 下一次put、offer或add操作的元素索引 */
     int putIndex;
 
-    /** Number of elements in the queue */
+    /** 队列中的元素数量 */
     int count;
 
     /*
@@ -52,19 +52,17 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
      * found in any textbook.
      */
 
-    /** Main lock guarding all access */
+    /** 保护所有访问的主锁 */
     final ReentrantLock lock;
 
-    /** Condition for waiting takes */
+    /** 队列非空时的等待条件 */
     private final Condition notEmpty;
 
-    /** Condition for waiting puts */
+    /** 队列非满时的等待条件 */
     private final Condition notFull;
 
     /**
-     * Shared state for currently active iterators, or null if there
-     * are known not to be any.  Allows queue operations to update
-     * iterator state.
+     * 当前活动迭代器的共享状态，如果不存在则返回null
      */
     transient Itrs itrs = null;
 
@@ -86,7 +84,8 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
     }
 
     /**
-     * Throws NullPointerException if argument is null.
+     * 检查传入对象不为Null
+     * 如果为null，则抛出NullPointerException空指针异常
      *
      * @param v the element
      */
@@ -174,61 +173,45 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
     }
 
     /**
-     * Creates an {@code ArrayBlockingQueue} with the given (fixed)
-     * capacity and default access policy.
-     *
-     * @param capacity the capacity of this queue
-     * @throws IllegalArgumentException if {@code capacity < 1}
+     * 创建一个制定容量的ArrayBlockingQueue队列
+     * 访问策略默认为非公平锁
      */
     public ArrayBlockingQueue(int capacity) {
         this(capacity, false);
     }
 
     /**
-     * Creates an {@code ArrayBlockingQueue} with the given (fixed)
-     * capacity and the specified access policy.
-     *
-     * @param capacity the capacity of this queue
-     * @param fair if {@code true} then queue accesses for threads blocked
-     *        on insertion or removal, are processed in FIFO order;
-     *        if {@code false} the access order is unspecified.
-     * @throws IllegalArgumentException if {@code capacity < 1}
+     * 创建一个制定容量制定访问策略的ArrayBlockingQueue队列
      */
     public ArrayBlockingQueue(int capacity, boolean fair) {
+    	// 容量检查
         if (capacity <= 0)
             throw new IllegalArgumentException();
+        // 初始化制定容量的数组
         this.items = new Object[capacity];
+        // 初始化制定策略的全局保护锁
         lock = new ReentrantLock(fair);
+        // 获取非空和非满的条件实例
         notEmpty = lock.newCondition();
         notFull =  lock.newCondition();
     }
 
     /**
-     * Creates an {@code ArrayBlockingQueue} with the given (fixed)
-     * capacity, the specified access policy and initially containing the
-     * elements of the given collection,
-     * added in traversal order of the collection's iterator.
-     *
-     * @param capacity the capacity of this queue
-     * @param fair if {@code true} then queue accesses for threads blocked
-     *        on insertion or removal, are processed in FIFO order;
-     *        if {@code false} the access order is unspecified.
-     * @param c the collection of elements to initially contain
-     * @throws IllegalArgumentException if {@code capacity} is less than
-     *         {@code c.size()}, or less than 1.
-     * @throws NullPointerException if the specified collection or any
-     *         of its elements are null
+     * 创建一个指定容量指定访问策略并且包含指定集合元素的ArrayBlockingQueue队列
      */
     public ArrayBlockingQueue(int capacity, boolean fair,
                               Collection<? extends E> c) {
+    	// 创建一个制定容量制定访问策略的ArrayBlockingQueue队列
         this(capacity, fair);
 
         final ReentrantLock lock = this.lock;
-        lock.lock(); // Lock only for visibility, not mutual exclusion
+        lock.lock(); // 此处加锁仅是为了线程可见性，不是互斥
         try {
             int i = 0;
             try {
+            	// 使用此集合迭代器迭代所有元素
                 for (E e : c) {
+                	// 检查元素不为null，如果为null抛出空指针异常
                     checkNotNull(e);
                     items[i++] = e;
                 }
