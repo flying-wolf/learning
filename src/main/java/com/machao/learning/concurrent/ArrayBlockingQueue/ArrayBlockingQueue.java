@@ -38,10 +38,10 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
     /** 保存元素的queue数组 */
     final Object[] items;
 
-    /** 下一次take、poll、peek或remove操作的元素索引 */
+    /** 下一次出队(take、poll、peek或remove)操作的元素索引 */
     int takeIndex;
 
-    /** 下一次put、offer或add操作的元素索引 */
+    /** 下一次入队(put、offer或add)操作的元素索引 */
     int putIndex;
 
     /** 队列中的元素数量 */
@@ -55,10 +55,10 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
     /** 保护所有访问的主锁 */
     final ReentrantLock lock;
 
-    /** 队列非空时的等待条件 */
+    /** 队列非空时的等待条件（出队操作等待条件） */
     private final Condition notEmpty;
 
-    /** 队列非满时的等待条件 */
+    /** 队列非满时的等待条件（入队操作等待条件） */
     private final Condition notFull;
 
     /**
@@ -95,62 +95,78 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
     }
 
     /**
-     * Inserts element at current put position, advances, and signals.
-     * Call only when holding lock.
+     * 入列
+     * 将元素插入当前putIndex位置
+     * 入列操作必须持有锁
      */
     private void enqueue(E x) {
         // assert lock.getHoldCount() == 1;
         // assert items[putIndex] == null;
         final Object[] items = this.items;
+        //将值插入到当前位置
         items[putIndex] = x;
+        // 如果入队索引等于数组长度
         if (++putIndex == items.length)
-            putIndex = 0;
-        count++;
+            // 重置入队索引
+        	putIndex = 0;
+        count++;// 累加数组中的元素数
+        // 唤醒notEmpty条件上等待的线程
         notEmpty.signal();
     }
 
     /**
-     * Extracts element at current take position, advances, and signals.
-     * Call only when holding lock.
+     * 出队
+     * 从takeIndex索引位置取出元素，并将此位置赋值为null
+     * 唤醒在notFull条件上等待的线程
+     * 
+     * 出队操作必须持有锁
      */
     private E dequeue() {
         // assert lock.getHoldCount() == 1;
         // assert items[takeIndex] != null;
         final Object[] items = this.items;
         @SuppressWarnings("unchecked")
+        // 根据出队索引获取数组中索引位置的元素，并将该索引位置赋值为null
+        // 出队指索引为数组中第一个元素的索引
         E x = (E) items[takeIndex];
         items[takeIndex] = null;
+        // 检查出队索引等于数组长度
         if (++takeIndex == items.length)
+        	// 重置出队索引
             takeIndex = 0;
-        count--;
+        count--;// 数组中元素数量
         if (itrs != null)
             itrs.elementDequeued();
+        // 唤醒notFull条件上等待的线程
         notFull.signal();
         return x;
     }
 
     /**
-     * Deletes item at array index removeIndex.
-     * Utility for remove(Object) and iterator.remove.
-     * Call only when holding lock.
+     * 删除指定索引位置的元素
+     * 
+     * 此操作必须持有锁，操作成功后会唤醒notFull条件上等待的线程
      */
     void removeAt(final int removeIndex) {
         // assert lock.getHoldCount() == 1;
         // assert items[removeIndex] != null;
         // assert removeIndex >= 0 && removeIndex < items.length;
         final Object[] items = this.items;
-        if (removeIndex == takeIndex) {
+        if (removeIndex == takeIndex) {// 如果要删除的元素是此队列的头索引
             // removing front item; just advance
+        	// 将此索引位置赋值为null
             items[takeIndex] = null;
+            // 如果出队索引等于数组长度
             if (++takeIndex == items.length)
-                takeIndex = 0;
-            count--;
+                takeIndex = 0;// 重置出队索引
+            count--;// 数组中的元素数-1
             if (itrs != null)
                 itrs.elementDequeued();
         } else {
             // an "interior" remove
 
             // slide over all others up through putIndex.
+        	// 遍历数组删除指定索引的元素，并重置入队索引
             final int putIndex = this.putIndex;
             for (int i = removeIndex;;) {
                 int next = i + 1;
@@ -165,10 +181,11 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
                     break;
                 }
             }
-            count--;
+            count--;// 数组中元素数-1
             if (itrs != null)
                 itrs.removedAt(removeIndex);
         }
+        // 唤醒notFull条件上等待的线程
         notFull.signal();
     }
 
@@ -213,12 +230,15 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
                 for (E e : c) {
                 	// 检查元素不为null，如果为null抛出空指针异常
                     checkNotNull(e);
+                    
                     items[i++] = e;
                 }
             } catch (ArrayIndexOutOfBoundsException ex) {
                 throw new IllegalArgumentException();
             }
+            // 获取数组中元素数量
             count = i;
+            // 获取下一次put操作的索引
             putIndex = (i == capacity) ? 0 : i;
         } finally {
             lock.unlock();
@@ -226,37 +246,32 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
     }
 
     /**
-     * Inserts the specified element at the tail of this queue if it is
-     * possible to do so immediately without exceeding the queue's capacity,
-     * returning {@code true} upon success and throwing an
-     * {@code IllegalStateException} if this queue is full.
-     *
-     * @param e the element to add
-     * @return {@code true} (as specified by {@link Collection#add})
-     * @throws IllegalStateException if this queue is full
-     * @throws NullPointerException if the specified element is null
+     * 调用offer方法像队列尾部插入元素
+     * 如果成功返回true
+     * 如果队列已满抛出IllegalStateException异常
+     * 如果元素为null则抛出NullPointerException异常
      */
     public boolean add(E e) {
         return super.add(e);
     }
 
     /**
-     * Inserts the specified element at the tail of this queue if it is
-     * possible to do so immediately without exceeding the queue's capacity,
-     * returning {@code true} upon success and {@code false} if this queue
-     * is full.  This method is generally preferable to method {@link #add},
-     * which can fail to insert an element only by throwing an exception.
-     *
-     * @throws NullPointerException if the specified element is null
+     * 将指定元素插入此队列尾部
+     * 如果成功返回true
+     * 如果容量已满返回false
+     * 如果待插入元素为null则抛出NullPointerException
      */
     public boolean offer(E e) {
+    	// 元素检查，如果为null抛出空指针异常
         checkNotNull(e);
         final ReentrantLock lock = this.lock;
-        lock.lock();
+        lock.lock();// 加锁
         try {
+        	// 校验容量如果已满则返回false
             if (count == items.length)
                 return false;
             else {
+            	// 入队操作
                 enqueue(e);
                 return true;
             }
@@ -266,19 +281,23 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
     }
 
     /**
-     * Inserts the specified element at the tail of this queue, waiting
-     * for space to become available if the queue is full.
+     * 将指定元素插入此队列尾部
+     * 如果队列已满则阻塞，直到容量不满或被其它线程中断
      *
-     * @throws InterruptedException {@inheritDoc}
-     * @throws NullPointerException {@inheritDoc}
+     * 如果被其它线程调用该线程的interrupt()方法中断线程，则抛出InterruptedException异常
+     * 如果指定要插入的元素为null，则抛出NullPoniterException异常
+     * 
      */
     public void put(E e) throws InterruptedException {
+    	// 检查如果元素为null抛出空指针异常
         checkNotNull(e);
         final ReentrantLock lock = this.lock;
-        lock.lockInterruptibly();
+        lock.lockInterruptibly(); // 可中断锁
         try {
+        	// 检查如果队列已满则触发等待条件
             while (count == items.length)
                 notFull.await();
+            // 入队操作
             enqueue(e);
         } finally {
             lock.unlock();
@@ -286,26 +305,33 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
     }
 
     /**
-     * Inserts the specified element at the tail of this queue, waiting
-     * up to the specified wait time for space to become available if
-     * the queue is full.
-     *
-     * @throws InterruptedException {@inheritDoc}
-     * @throws NullPointerException {@inheritDoc}
+     * 将指定元素插入此队列的尾部
+     * 
+     * 如果当前队列已满则阻塞，直到队列不满、线程被中断或者阻塞超时
+     * 如果阻塞超时则返回false
+     * 如果指定元素为null则抛出NullPointerException异常
+     * 如果当前线程被其它线程调用interrupt()方法中断则抛出InterruptedException异常
+     * 插入成功返回true
      */
-    public boolean offer(E e, long timeout, TimeUnit unit)
+    public boolean offer(E e, long timeout,
+    		TimeUnit unit)
         throws InterruptedException {
 
+    	// 检查指定插入的元素为null时抛出空指针异常
         checkNotNull(e);
+        // 获取超时时间(毫秒)
         long nanos = unit.toNanos(timeout);
         final ReentrantLock lock = this.lock;
-        lock.lockInterruptibly();
+        lock.lockInterruptibly();// 可中断锁
         try {
+        	// 当队列已满时
             while (count == items.length) {
-                if (nanos <= 0)
+                if (nanos <= 0)// 检查如果达到超时时间则返回false
                     return false;
+                // 阻塞，当阻塞时间达到指定的超时时间后被唤醒
                 nanos = notFull.awaitNanos(nanos);
             }
+            // 入队方法
             enqueue(e);
             return true;
         } finally {
@@ -313,48 +339,86 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
         }
     }
 
+    /**
+     * 检索并删除此队列的头部元素，如果队列为空则返回null
+     * 
+     * 此操作成功后会试图唤醒notFull条件上等待的线程
+     */
     public E poll() {
+    	// 可重入锁
         final ReentrantLock lock = this.lock;
-        lock.lock();
+        lock.lock(); // 取得锁
         try {
+        	// 如果当前数组为空返回null，否则调用出队方法
             return (count == 0) ? null : dequeue();
         } finally {
             lock.unlock();
         }
     }
 
+    /**
+     * 检索并删除此队列头部元素
+     * 如果队列为空则阻塞直到队列非空或当前线程被中断
+     * 
+     * 此操作成功后会试图唤醒notFull条件上等待的线程
+     * 
+     * 当前线程被中断会抛出InterruptedException异常
+     */
     public E take() throws InterruptedException {
+    	// 可重入锁
         final ReentrantLock lock = this.lock;
-        lock.lockInterruptibly();
+        lock.lockInterruptibly();// 获取可中断锁
         try {
+        	// 如果队列为空则阻塞直到notEmpty被唤醒，或调用此线程的interrupt()方法中断当前线程
             while (count == 0)
                 notEmpty.await();
+            // 调用出队方法
             return dequeue();
         } finally {
             lock.unlock();
         }
     }
 
+    /**
+     * 检索或删除此队列头部元素
+     * 如果此队列为空则阻塞，直到达到下列条件
+     * 		1.队列不为空
+     * 		2.阻塞达到指定时间
+     * 		3.当前线程被中断
+     * 
+     * 阻塞超时后返回null
+     * 当前线程被中断后抛出InterruptedException异常
+     * 
+     * 此操作成功获取元素后会试图唤醒notFull条件上等待的线程
+     */
     public E poll(long timeout, TimeUnit unit) throws InterruptedException {
+    	// 超时毫秒数
         long nanos = unit.toNanos(timeout);
-        final ReentrantLock lock = this.lock;
-        lock.lockInterruptibly();
+        final ReentrantLock lock = this.lock; // 可重入锁
+        lock.lockInterruptibly(); // 获取可中断锁
         try {
+        	// 此队列为空时
             while (count == 0) {
-                if (nanos <= 0)
+                if (nanos <= 0)// 当阻塞达到超时时间后返回null
                     return null;
+                // 当前线程阻塞，直到notEmpty条件被唤醒或达到超时时间
                 nanos = notEmpty.awaitNanos(nanos);
             }
+            // 调用出队方法
             return dequeue();
         } finally {
             lock.unlock();
         }
     }
 
+    /**
+     * 获取此队列头部元素
+     */
     public E peek() {
         final ReentrantLock lock = this.lock;
-        lock.lock();
+        lock.lock();// 得到锁
         try {
+        	// 返回数组中当前出队索引位置的元素
             return itemAt(takeIndex); // null when queue is empty
         } finally {
             lock.unlock();
@@ -364,7 +428,7 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
     // this doc comment is overridden to remove the reference to collections
     // greater in size than Integer.MAX_VALUE
     /**
-     * Returns the number of elements in this queue.
+     * 返回此队列中的元素数
      *
      * @return the number of elements in this queue
      */
@@ -402,33 +466,25 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
     }
 
     /**
-     * Removes a single instance of the specified element from this queue,
-     * if it is present.  More formally, removes an element {@code e} such
-     * that {@code o.equals(e)}, if this queue contains one or more such
-     * elements.
-     * Returns {@code true} if this queue contained the specified element
-     * (or equivalently, if this queue changed as a result of the call).
-     *
-     * <p>Removal of interior elements in circular array based queues
-     * is an intrinsically slow and disruptive operation, so should
-     * be undertaken only in exceptional circumstances, ideally
-     * only when the queue is known not to be accessible by other
-     * threads.
-     *
-     * @param o element to be removed from this queue, if present
-     * @return {@code true} if this queue changed as a result of the call
+     * 将指定元素从此队列中删除
+     * 如果元素在此队列中存在一个或多个返回true
+     * 如果此队列中没有此元素或队列为空返回false
+     * 
+     * 此操作返回true会唤醒notFull条件上等待的其它线程
      */
     public boolean remove(Object o) {
         if (o == null) return false;
         final Object[] items = this.items;
         final ReentrantLock lock = this.lock;
-        lock.lock();
+        lock.lock(); //获取锁
         try {
             if (count > 0) {
                 final int putIndex = this.putIndex;
                 int i = takeIndex;
-                do {
+                do {// 遍历数组
+                	
                     if (o.equals(items[i])) {
+                    	// 删除i位置的元素
                         removeAt(i);
                         return true;
                     }
