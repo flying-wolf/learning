@@ -12,16 +12,16 @@
   试图从空队列中检索元素会导致类似的阻塞；
 
 
-## 数据结构
+## 结构
 > ArrayBlockingQueue底层由一个指定大小的数组实现
 
-## 保证并发
+## 并发
 > ArrayBlockingQueue是线程安全的，通过ReentrantLock（互斥所）来保护竞争资源，实现了多线程对竞争资源的互斥访问。
 
 ## 效率
 > ArrayBlockingQueue内部使用一把锁，当存取两种操作同时竞争一把锁时效率较低，这种场景下可以使用LinkedBlockingQueue。
 
-## 重要的属性
+## 属性
 ```Java
     /** 保存元素的queue数组 */
     final Object[] items;
@@ -45,7 +45,7 @@
     private final Condition notFull;
 ```
 
-## 重要方法
+## 方法
 > 构造函数：ArrayBlockingQueue(int capacity, boolean fair)/ ArrayBlockingQueue(int capacity, boolean fair, Collection<? extends E> c)
 
 ```Java
