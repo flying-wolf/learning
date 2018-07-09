@@ -14,32 +14,13 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
 /**
- * An optionally-bounded {@linkplain BlockingQueue blocking queue} based on
- * linked nodes.
- * This queue orders elements FIFO (first-in-first-out).
- * The <em>head</em> of the queue is that element that has been on the
- * queue the longest time.
- * The <em>tail</em> of the queue is that element that has been on the
- * queue the shortest time. New elements
- * are inserted at the tail of the queue, and the queue retrieval
- * operations obtain elements at the head of the queue.
- * Linked queues typically have higher throughput than array-based queues but
- * less predictable performance in most concurrent applications.
- *
- * <p>The optional capacity bound constructor argument serves as a
- * way to prevent excessive queue expansion. The capacity, if unspecified,
- * is equal to {@link Integer#MAX_VALUE}.  Linked nodes are
- * dynamically created upon each insertion unless this would bring the
- * queue above capacity.
- *
- * <p>This class and its iterator implement all of the
- * <em>optional</em> methods of the {@link Collection} and {@link
- * Iterator} interfaces.
- *
- * <p>This class is a member of the
- * <a href="{@docRoot}/../technotes/guides/collections/index.html">
- * Java Collections Framework</a>.
- *
+ * LinkedBlockingQueue是一个由链表结构支持的可选是否有界的BlockingQueue阻塞队列，不允许null值。
+ * 此队列按照FIFO(先进先出)原则对队列中的元素进行排序。
+ * 队列的头部元素是队列中储存时间最长的元素。
+ * 队列的尾部元素是队列中储存时间最短的元素。
+ * 新元素会插入到队列尾部，元素检索操作会从队列的头部开始。
+ * 链接队列通常具有比基于数组的队列更高的吞吐量，但在大多数并发应用程序中的预测性能较低。
+ * 
  * @since 1.5
  * @author Doug Lea
  * @param <E> the type of elements held in this collection
@@ -107,12 +88,12 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
     private final AtomicInteger count = new AtomicInteger();
 
     /**
-     * 链表中的头元素
+     * 队列（链表）中的头元素
      */
     transient Node<E> head;
 
     /**
-     * 链表结尾元素
+     * 队列（链表）结尾元素
      */
     private transient Node<E> last;
 
@@ -156,7 +137,7 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
     }
 
     /**
-     * 入队
+     * 入队操作
      * 将指定节点插入到队列尾部
      */
     private void enqueue(Node<E> node) {
@@ -166,14 +147,17 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
     }
 
     /**
-     * Removes a node from head of queue.
+     * 出队操作
+     * 
      *
      * @return the node
      */
     private E dequeue() {
         // assert takeLock.isHeldByCurrentThread();
         // assert head.item == null;
+    	// 取出当前头元素
         Node<E> h = head;
+        // 将头元素
         Node<E> first = h.next;
         h.next = h; // help GC
         head = first;
