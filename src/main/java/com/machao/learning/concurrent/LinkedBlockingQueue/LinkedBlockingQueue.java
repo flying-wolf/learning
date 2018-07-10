@@ -14,7 +14,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
 /**
- * LinkedBlockingQueue是一个由链表结构支持的可选是否有界的BlockingQueue阻塞队列，不允许null值。
+ * LinkedBlockingQueue是一个由单向链表结构支持的可选是否有界的BlockingQueue阻塞队列，不允许null值。
  * 此队列按照FIFO(先进先出)原则对队列中的元素进行排序。
  * 队列的头部元素是队列中储存时间最长的元素。
  * 队列的尾部元素是队列中储存时间最短的元素。
@@ -110,8 +110,8 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
     private final Condition notFull = putLock.newCondition();
 
     /**
-     * Signals a waiting take. Called only from put/offer (which do not
-     * otherwise ordinarily lock takeLock.)
+     * 唤醒在notEmpty条件上等待的线程
+     * 此方法只在put/offer中使用
      */
     private void signalNotEmpty() {
         final ReentrantLock takeLock = this.takeLock;
@@ -124,7 +124,9 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
     }
 
     /**
-     * Signals a waiting put. Called only from take/poll.
+     * 唤醒notFull条件上阻塞的线程
+     * 
+     * 此方法由take/poll方法调用
      */
     private void signalNotFull() {
         final ReentrantLock putLock = this.putLock;
@@ -143,31 +145,29 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
     private void enqueue(Node<E> node) {
         // assert putLock.isHeldByCurrentThread();
         // assert last.next == null;
+    	// 封装新节点，并赋给当前的最后一个节点的下一个节点，然后在将这个节点设为最后一个节点
         last = last.next = node;
     }
 
     /**
      * 出队操作
-     * 
-     *
+     * 从队列头部移除一个节点
      * @return the node
      */
     private E dequeue() {
         // assert takeLock.isHeldByCurrentThread();
         // assert head.item == null;
-    	// 取出当前头元素
-        Node<E> h = head;
-        // 将头元素
-        Node<E> first = h.next;
-        h.next = h; // help GC
-        head = first;
-        E x = first.item;
-        first.item = null;
-        return x;
+        Node<E> h = head; //获取头结点
+        Node<E> first = h.next; //将头结点的下一个节点赋值给first
+        h.next = h; // 将当前要出队的节点置为null,有助于GC回收
+        head = first; //将要出队的节点置为头结点
+        E x = first.item; //获取要出队的节点值
+        first.item = null; //将头结点值置为null
+        return x;// 返回出队的节点值
     }
 
     /**
-     * Locks to prevent both puts and takes.
+     * 同时获取入队锁与出队锁
      */
     void fullyLock() {
         putLock.lock();
@@ -204,8 +204,10 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
      *
      */
     public LinkedBlockingQueue(int capacity) {
+    	// 指定容量必须大于0，否则抛出异常
         if (capacity <= 0) throw new IllegalArgumentException();
         this.capacity = capacity;
+        // 创建一个值为null的节点赋值给头结点，然后让尾部节点指向头结点
         last = head = new Node<E>(null);
     }
 
@@ -272,21 +274,22 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
     }
 
     /**
-     * Inserts the specified element at the tail of this queue, waiting if
-     * necessary for space to become available.
-     *
-     * @throws InterruptedException {@inheritDoc}
-     * @throws NullPointerException {@inheritDoc}
+     * 将指定元素插入到此队列的尾部，队列满则阻塞等待
+     * 
+     * 如果此队列已满则当前线程阻塞直至队列不满或当前线程被其他线程中断
+     * 如果要插入的元素为null则抛出NullPointerException异常
+     * 如果当前线程被中断则抛出InterruptedException异常
      */
     public void put(E e) throws InterruptedException {
+    	// 插入的元素必须非空，否则抛出异常
         if (e == null) throw new NullPointerException();
         // Note: convention in all put/take/etc is to preset local var
         // holding count negative to indicate failure unless set.
         int c = -1;
-        Node<E> node = new Node<E>(e);
-        final ReentrantLock putLock = this.putLock;
-        final AtomicInteger count = this.count;
-        putLock.lockInterruptibly();
+        Node<E> node = new Node<E>(e); // 创建要插入的节点
+        final ReentrantLock putLock = this.putLock; //入队锁
+        final AtomicInteger count = this.count; // 获取当前队列元素个数 
+        putLock.lockInterruptibly(); //获取可中断锁
         try {
             /*
              * Note that count is used in wait guard even though it is
@@ -297,214 +300,262 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
              * for all other uses of count in other wait guards.
              */
             while (count.get() == capacity) {
-                notFull.await();
+                /*
+                 *  如果当前队列已满，则阻塞
+                 *  直到队列不满被其他线程唤醒，或当前线程被中断
+                 */
+            	notFull.await(); 
             }
+            // 调用入队操作将新节点插入到队列尾部
             enqueue(node);
+            // 入队数量+1
             c = count.getAndIncrement();
             if (c + 1 < capacity)
+            	// 当队列不满时唤醒在notFull条件上等待的线程
                 notFull.signal();
         } finally {
             putLock.unlock();
         }
         if (c == 0)
-            signalNotEmpty();
+        	// 如果当前队列为空，唤醒在notEmpty条件上等待的线程
+            signalNotEmpty(); 
     }
 
     /**
-     * Inserts the specified element at the tail of this queue, waiting if
-     * necessary up to the specified wait time for space to become available.
-     *
-     * @return {@code true} if successful, or {@code false} if
-     *         the specified waiting time elapses before space is available
-     * @throws InterruptedException {@inheritDoc}
-     * @throws NullPointerException {@inheritDoc}
+     * 将指定的元素插入到此队列尾部，成功立即返回true，队列满则阻塞等待
+     * 
+     * 如果队列已满且阻塞时间超出指定时间则返回false
+     * 如果插入的元素为null则抛出NullPointerException异常
+     * 如果当前线程被中断则抛出InterruptedException异常
+     * 
      */
     public boolean offer(E e, long timeout, TimeUnit unit)
         throws InterruptedException {
-
+    	//插入的元素必须非空，否则抛出异常
         if (e == null) throw new NullPointerException();
-        long nanos = unit.toNanos(timeout);
+        long nanos = unit.toNanos(timeout); // 获取超时毫秒数
         int c = -1;
-        final ReentrantLock putLock = this.putLock;
-        final AtomicInteger count = this.count;
-        putLock.lockInterruptibly();
+        final ReentrantLock putLock = this.putLock; // 入队锁
+        final AtomicInteger count = this.count; // 获取当前队列元素个数
+        putLock.lockInterruptibly(); // 获取可中断锁
         try {
-            while (count.get() == capacity) {
+            while (count.get() == capacity) { // 容量检查
                 if (nanos <= 0)
+                	// 超出阻塞时间则返回false
                     return false;
+                //队列容量已满，则阻塞，当阻塞时间达到指定的超时时间后被唤醒
                 nanos = notFull.awaitNanos(nanos);
             }
+            // 创建新节点，调用入队操作将新节点插入到此队列尾部
             enqueue(new Node<E>(e));
+            // 此队列元素个数+1
             c = count.getAndIncrement();
             if (c + 1 < capacity)
-                notFull.signal();
+                notFull.signal();// 队列不满唤醒notFull条件上阻塞的线程
         } finally {
             putLock.unlock();
         }
         if (c == 0)
+        	// 如果队列为空唤醒notEmpty条件上阻塞的线程
             signalNotEmpty();
         return true;
     }
 
     /**
-     * Inserts the specified element at the tail of this queue if it is
-     * possible to do so immediately without exceeding the queue's capacity,
-     * returning {@code true} upon success and {@code false} if this queue
-     * is full.
-     * When using a capacity-restricted queue, this method is generally
-     * preferable to method {@link BlockingQueue#add add}, which can fail to
-     * insert an element only by throwing an exception.
-     *
-     * @throws NullPointerException if the specified element is null
+     * 将指定元素插入此队列尾部，成功返回true,失败或队列已满立即返回false
+     * 
+     * 如果元素为null则抛出NullPointerException异常
      */
     public boolean offer(E e) {
+    	// 插入的元素必须非空，否则抛出异常
         if (e == null) throw new NullPointerException();
+        // 获取此队列中元素个数
         final AtomicInteger count = this.count;
+        // 如果此队列已满则立即返回false
         if (count.get() == capacity)
             return false;
         int c = -1;
-        Node<E> node = new Node<E>(e);
-        final ReentrantLock putLock = this.putLock;
-        putLock.lock();
+        Node<E> node = new Node<E>(e);// 创建新节点
+        final ReentrantLock putLock = this.putLock; //入队锁
+        putLock.lock(); //获取可重入锁
         try {
-            if (count.get() < capacity) {
+            if (count.get() < capacity) {// 二次验证此队列是否已满
+            	// 调用入队操作将新节点插入此队列尾部
                 enqueue(node);
+                // 队列中元素个数+1
                 c = count.getAndIncrement();
                 if (c + 1 < capacity)
+                	// 如果队列不满则唤醒notFull条件上阻塞的线程
                     notFull.signal();
             }
         } finally {
             putLock.unlock();
         }
         if (c == 0)
+        	// 队列为空则唤醒notEmpty条件上阻塞的线程
             signalNotEmpty();
-        return c >= 0;
+        return c >= 0;// 如果插入成功返回true
     }
 
+    /**
+     * 检索并删除此队列的头元素，为空则阻塞等待
+     * 
+     * 如果当前线程被中断则抛出InterruptedException异常
+     */
     public E take() throws InterruptedException {
         E x;
         int c = -1;
-        final AtomicInteger count = this.count;
-        final ReentrantLock takeLock = this.takeLock;
-        takeLock.lockInterruptibly();
+        final AtomicInteger count = this.count; // 当前队列元素个数
+        final ReentrantLock takeLock = this.takeLock; // 获取出队锁
+        takeLock.lockInterruptibly(); // 获取可中断锁
         try {
             while (count.get() == 0) {
+            	// 如果队列为空则阻塞
                 notEmpty.await();
             }
+            // 调用出队操作将队列头部元素取出
             x = dequeue();
+            // 队列元素个数-1
             c = count.getAndDecrement();
             if (c > 1)
+            	// 队列不为空则唤醒notEmpty条件上阻塞的线程
                 notEmpty.signal();
         } finally {
             takeLock.unlock();
         }
         if (c == capacity)
+        	// 队列满了则唤醒notFull条件上阻塞的线程
             signalNotFull();
-        return x;
+        return x; // 返回取出的元素
     }
 
+    /**
+     * 检索并删除此队列的头元素，如果队列为空则阻塞
+     * 
+     * 如果阻塞时间超出指定的超时时间则返回null
+     * 如果当前线程被中断则抛出InterruptedException异常
+     */
     public E poll(long timeout, TimeUnit unit) throws InterruptedException {
         E x = null;
         int c = -1;
-        long nanos = unit.toNanos(timeout);
-        final AtomicInteger count = this.count;
-        final ReentrantLock takeLock = this.takeLock;
-        takeLock.lockInterruptibly();
+        long nanos = unit.toNanos(timeout);// 获取超时毫秒数
+        final AtomicInteger count = this.count; //当前队列中的元素个数
+        final ReentrantLock takeLock = this.takeLock; //获取出队锁
+        takeLock.lockInterruptibly(); //获取可中断锁
         try {
-            while (count.get() == 0) {
+            while (count.get() == 0) { // 容量检查
                 if (nanos <= 0)
+                	// 如果阻塞超时则返回null
                     return null;
+                // 如果队列为空，则阻塞，当阻塞时间超过设置的超时时间时唤醒当前线程
                 nanos = notEmpty.awaitNanos(nanos);
             }
+            // 调用出队方法取出此队列的头元素
             x = dequeue();
+            // 队列元素个数-1
             c = count.getAndDecrement();
             if (c > 1)
+            	// 如果队列不为空则唤醒notEmpty条件上阻塞的线程
                 notEmpty.signal();
         } finally {
             takeLock.unlock();
         }
         if (c == capacity)
+        	// 如果队列已满则唤醒
             signalNotFull();
-        return x;
+        return x; // 返回取出的头元素
     }
 
+    /**
+     * 检索并删除此队列的头元素，如果队列为空则返回null
+     */
     public E poll() {
-        final AtomicInteger count = this.count;
-        if (count.get() == 0)
+        final AtomicInteger count = this.count; // 当前队列元素个数
+        if (count.get() == 0) 
+        	// 如果队列为空则返回null
             return null;
         E x = null;
         int c = -1;
-        final ReentrantLock takeLock = this.takeLock;
-        takeLock.lock();
+        final ReentrantLock takeLock = this.takeLock; // 获取出队锁
+        takeLock.lock(); // 获取可重入锁
         try {
-            if (count.get() > 0) {
-                x = dequeue();
+            if (count.get() > 0) { //二次校验队列不为空
+                x = dequeue();// 调用出队操作将此队列头部元素取出
+                // 此队列元素个数-1
                 c = count.getAndDecrement();
                 if (c > 1)
+                	// 如果队列不为空则唤醒notEmpty条件上阻塞的线程
                     notEmpty.signal();
             }
         } finally {
             takeLock.unlock();
         }
         if (c == capacity)
+        	// 如果队列已满则唤醒notFull条件上阻塞的线程
             signalNotFull();
-        return x;
+        return x; //返回取出的头元素
     }
 
+    /**
+     * 检索此队列的头元素,如果队列为空则返回null
+     * 
+     */
     public E peek() {
         if (count.get() == 0)
+        	// 队列为空则返回null
             return null;
-        final ReentrantLock takeLock = this.takeLock;
-        takeLock.lock();
+        final ReentrantLock takeLock = this.takeLock; // 出队锁
+        takeLock.lock(); // 加锁
         try {
-            Node<E> first = head.next;
-            if (first == null)
+            Node<E> first = head.next; // 将头节点赋值给first
+            if (first == null)// 二次校验队列非空，如果first为null则返回null
                 return null;
             else
-                return first.item;
+                return first.item; //返回头节点的值
         } finally {
             takeLock.unlock();
         }
     }
 
     /**
-     * Unlinks interior Node p with predecessor trail.
+     * 取消链表内部p节点与trail节点的连接。
      */
     void unlink(Node<E> p, Node<E> trail) {
         // assert isFullyLocked();
         // p.next is not changed, to allow iterators that are
         // traversing p to maintain their weak-consistency guarantee.
-        p.item = null;
-        trail.next = p.next;
+        p.item = null;// 将p的值置为null
+        trail.next = p.next;// 将trail的下一个节点与p的下一个节点连接
         if (last == p)
+        	// 如果p是尾节点 将尾节点设置为trail
             last = trail;
+        // 队列中元素个数-1
         if (count.getAndDecrement() == capacity)
+        	// 如果队列满则唤醒notFull条件上阻塞的线程
             notFull.signal();
     }
 
     /**
-     * Removes a single instance of the specified element from this queue,
-     * if it is present.  More formally, removes an element {@code e} such
-     * that {@code o.equals(e)}, if this queue contains one or more such
-     * elements.
-     * Returns {@code true} if this queue contained the specified element
-     * (or equivalently, if this queue changed as a result of the call).
-     *
-     * @param o element to be removed from this queue, if present
-     * @return {@code true} if this queue changed as a result of the call
+     * 从此队列删除指定元素，成功返回true，失败返回false
+     * 如果此队列包含多个这样的元素则从队列头部开始查找删除一个
      */
     public boolean remove(Object o) {
+    	// 要移除的对象必须非空，否则返回false
         if (o == null) return false;
-        fullyLock();
+        fullyLock(); // 同时将入队锁与出队锁锁住
         try {
+        	// 从队列头部开始遍历链表，删除指定节点
             for (Node<E> trail = head, p = trail.next;
                  p != null;
                  trail = p, p = p.next) {
                 if (o.equals(p.item)) {
+                	// 取消链表内部p节点与trail节点的连接。
                     unlink(p, trail);
+                    // 成功后返回true
                     return true;
                 }
             }
+            // 如果失败返回false
             return false;
         } finally {
             fullyUnlock();
