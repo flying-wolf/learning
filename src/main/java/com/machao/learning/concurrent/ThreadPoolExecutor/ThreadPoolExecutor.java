@@ -23,27 +23,32 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class ThreadPoolExecutor extends AbstractExecutorService {
-	// 记录运行状态的原子整数类型
-    private final AtomicInteger ctl = new AtomicInteger(ctlOf(RUNNING, 0));
-    // 计数位数
-    private static final int COUNT_BITS = Integer.SIZE - 3;
-    // 容量
-    private static final int CAPACITY   = (1 << COUNT_BITS) - 1;
+	// ctl是用一个AtomicInteger变量存放两个字段，一共32位
+	// workerCount线程池线程个数。低29位表示。以后如果线程池支持的线程数量变多，可以改成AtomicLong。
+	// runState线程池状态，高3位表示。
+	// 默认是RUNNING状态，线程个数为0
+	private final AtomicInteger ctl = new AtomicInteger(ctlOf(RUNNING, 0));
+	// 线程个数掩码位数
+	private static final int COUNT_BITS = Integer.SIZE - 3;
+	// 程最大个数(低29位)00011111111111111111111111111111
+	private static final int CAPACITY = (1 << COUNT_BITS) - 1;
 
-    // 该状态的线程池会接收新任务，并处理阻塞队列里的任务
-    private static final int RUNNING    = -1 << COUNT_BITS;
-    // 该状态的线程池不会接收新任务，但会处理阻塞队列中的任务
-    private static final int SHUTDOWN   =  0 << COUNT_BITS;
-    // 该状态的线程池不会接收新任务，也不会处理阻塞队列中的任务，而且会中断正在运行的任务
-    private static final int STOP       =  1 << COUNT_BITS;
-    // 该状态的线程池所有任务都已终止
-    private static final int TIDYING    =  2 << COUNT_BITS;
-    // 该状态的线程池terminated()放已经执行完成
-    private static final int TERMINATED =  3 << COUNT_BITS;
+	// （高3位）：111：接受新任务并且处理阻塞队列里的任务
+	private static final int RUNNING = -1 << COUNT_BITS;
+	// （高3位）：000：不接受新任务但是处理阻塞队列里的任务
+	private static final int SHUTDOWN = 0 << COUNT_BITS;
+	// （高3位）：001：不接受新任务并且抛弃阻塞队列里的任务同时会中断正在处理的任务
+	private static final int STOP = 1 << COUNT_BITS;
+	// （高3位）：010：所有任务都执行完（包含阻塞队列任务）当前线程池活动线程为0，将要调用terminated方法
+	private static final int TIDYING = 2 << COUNT_BITS;
+	// （高3位）：011：终止状态。terminated方法调用完成以后的状态
+	private static final int TERMINATED = 3 << COUNT_BITS;
 
-    // Packing and unpacking ctl
+	// 获取高3位 线程状态
     private static int runStateOf(int c)     { return c & ~CAPACITY; }
+    // 获取低29位 线程个数
     private static int workerCountOf(int c)  { return c & CAPACITY; }
+    // 拼装ctl新值，线程状态与线程个数
     private static int ctlOf(int rs, int wc) { return rs | wc; }
 
     /*
@@ -926,33 +931,65 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
              Executors.defaultThreadFactory(), handler);
     }
 
-    /**
-     * Creates a new {@code ThreadPoolExecutor} with the given initial
-     * parameters.
-     *
-     * @param corePoolSize the number of threads to keep in the pool, even
-     *        if they are idle, unless {@code allowCoreThreadTimeOut} is set
-     * @param maximumPoolSize the maximum number of threads to allow in the
-     *        pool
-     * @param keepAliveTime when the number of threads is greater than
-     *        the core, this is the maximum time that excess idle threads
-     *        will wait for new tasks before terminating.
-     * @param unit the time unit for the {@code keepAliveTime} argument
-     * @param workQueue the queue to use for holding tasks before they are
-     *        executed.  This queue will hold only the {@code Runnable}
-     *        tasks submitted by the {@code execute} method.
-     * @param threadFactory the factory to use when the executor
-     *        creates a new thread
-     * @param handler the handler to use when execution is blocked
-     *        because the thread bounds and queue capacities are reached
-     * @throws IllegalArgumentException if one of the following holds:<br>
-     *         {@code corePoolSize < 0}<br>
-     *         {@code keepAliveTime < 0}<br>
-     *         {@code maximumPoolSize <= 0}<br>
-     *         {@code maximumPoolSize < corePoolSize}
-     * @throws NullPointerException if {@code workQueue}
-     *         or {@code threadFactory} or {@code handler} is null
-     */
+	/**
+	 * 根据给定参数创建一个ThreadPoolExecutor
+	 * 
+	 * @param corePoolSize
+	 *            线程池中的核心线程数
+	 * 
+	 *            默认情况下创建了线程池后，线程池中的线程数为0，当提交一个任务时，
+	 *            线程池创建一个新线程执行任务，直到当前线程数等于corePoolSize， 即使有其他空闲线程能够执行新来的任务，也会继续创建线程；
+	 * 
+	 *            如果当前线程数为corePoolSize，继续提交的任务被放入阻塞队列中，
+	 *            等待被执行；如果调用了线程池的prestartAllCoreThreads()方法， 线程池会提取创建并启动所有核心线程。
+	 * 
+	 * @param maximumPoolSize
+	 *            线程池中允许的最大线程数
+	 * 
+	 *            如果当前阻塞队列已满，且继续提交任务，则创建新的线程执行任务， 前提是当前线程数小于maximumPoolSize；
+	 * 
+	 *            当阻塞队列是无界队列，则maximumPoolSize不起作用， 因为无法提交至核心线程池的线程会不断的放入阻塞队列。
+	 * 
+	 * @param keepAliveTime
+	 *            空闲线程的存活时间
+	 * 
+	 *            即当线程没有任务执行时，该线程继续存活的时间；
+	 * 
+	 *            默认情况下，该参数只在线程数大于corePoolSize时才起作用，超过这个时间的空闲线程将被终止，直到线程数不大于corePoolSize；
+	 * 
+	 *            如果调用了allowCoreThreadTimeOut(boolean)方法，在线程池中的线程数不大于corePoolSize时，该参数也会起作用，直到线程池中的线程数为0。
+	 * @param unit
+	 *            keepAliveTime的时间单位
+	 * @param workQueue
+	 *            阻塞队列
+	 * 
+	 *            添加策略： 
+	 *            		正在执行的线程小于corePoolSize，创新新线程；
+	 *            		正在执行的线程大于等于corePoolSize，把任务添加到阻塞队列；
+	 *            		阻塞队列满了，且正在执行的线程小于maximumPoolSize，创建新线程； 
+	 *            		否则拒绝任务；
+	 * 
+	 *            阻塞队列类型： 
+	 *            		ArrayBlockingQueue 基于数组结构的有界阻塞队列，按照FIFO排序任务；
+	 *            		LinkedBlockingQueue 基于单向链表结构的可选是否有界的阻塞队列，按照FIFO排序任务，吞吐量通常要高于ArrayBlockingQueue；
+	 *            		SynchronousQueue 一个不存储元素的阻塞队列，每个入队操作必须等到另一个线程调用出队操作，否则入队操作一直处于阻塞状态，吞吐量通常要高于LinkedBlockingQueue；
+	 *            		PriorityBlockingQueue 一个基于数组结构且具有优先级的无界阻塞队列；
+	 * @param threadFactory
+	 *            创建线程的工厂 
+	 *            
+	 *            通过自定义线程工厂可以给每个新建的线程设置一个具有识别度的线程名称，默认为DefaultThreadFactory。
+	 * @param handler
+	 *            线程池的饱和策略 
+	 *            
+	 *            当阻塞队列满了，且没有空闲的工作线程，如果继续提交任务，采取的处理策略；
+	 * 
+	 *            线程池提供4中策略： 
+	 *            		AbortPolicy 直接抛出异常，默认策略； 
+	 *            		CallerRunsPolicy 用调用者所在的线程来执行任务； 
+	 *            		DiscardOldestPolicy 丢弃阻塞队列中最靠前的任务，并执行当前任务；
+	 *            		DiscardPolicy 直接丢弃任务； 
+	 *            		还可以实现RejectedExecutionHandler接口，自定义饱和策略；
+	 */
     public ThreadPoolExecutor(int corePoolSize,
                               int maximumPoolSize,
                               long keepAliveTime,
@@ -993,6 +1030,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
      * @throws NullPointerException if {@code command} is null
      */
     public void execute(Runnable command) {
+    	// 如果提交的线程为null则抛出空指针异常
         if (command == null)
             throw new NullPointerException();
         /*

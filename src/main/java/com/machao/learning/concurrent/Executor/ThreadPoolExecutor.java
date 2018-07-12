@@ -33,16 +33,31 @@
  * http://creativecommons.org/publicdomain/zero/1.0/
  */
 
-package java.util.concurrent;
+package com.machao.learning.concurrent.Executor;
 
 import java.security.AccessControlContext;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
+import java.util.ArrayList;
+import java.util.ConcurrentModificationException;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.RejectedExecutionHandler;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.AbstractQueuedSynchronizer;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.*;
 
 /**
  * An {@link ExecutorService} that executes each submitted task using
@@ -827,7 +842,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
      * Package-protected for use by ScheduledThreadPoolExecutor.
      */
     final void reject(Runnable command) {
-        handler.rejectedExecution(command, this);
+        handler.rejectedExecution(command, null);
     }
 
     /**
@@ -2038,6 +2053,12 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
                 r.run();
             }
         }
+
+		@Override
+		public void rejectedExecution(Runnable r, java.util.concurrent.ThreadPoolExecutor executor) {
+			// TODO Auto-generated method stub
+			
+		}
     }
 
     /**
@@ -2062,6 +2083,12 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
                                                  " rejected from " +
                                                  e.toString());
         }
+
+		@Override
+		public void rejectedExecution(Runnable r, java.util.concurrent.ThreadPoolExecutor executor) {
+			// TODO Auto-generated method stub
+			
+		}
     }
 
     /**
@@ -2082,6 +2109,12 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
          */
         public void rejectedExecution(Runnable r, ThreadPoolExecutor e) {
         }
+
+		@Override
+		public void rejectedExecution(Runnable r, java.util.concurrent.ThreadPoolExecutor executor) {
+			// TODO Auto-generated method stub
+			
+		}
     }
 
     /**
@@ -2110,5 +2143,11 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
                 e.execute(r);
             }
         }
+
+		@Override
+		public void rejectedExecution(Runnable r, java.util.concurrent.ThreadPoolExecutor executor) {
+			// TODO Auto-generated method stub
+			
+		}
     }
 }
