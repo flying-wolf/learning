@@ -995,7 +995,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
      * @throws NullPointerException if {@code command} is null
      */
     public void execute(Runnable command) {
-    	// 如果提交的线程为null则抛出空指针异常
+    	// NPE检查，线程池不允许提交NULL任务
         if (command == null)
             throw new NullPointerException();
         /*
@@ -1018,20 +1018,35 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
          * thread.  If it fails, we know we are shut down or saturated
          * and so reject the task.
          */
-        int c = ctl.get();
-        if (workerCountOf(c) < corePoolSize) {
-            if (addWorker(command, true))
+        int c = ctl.get();// 获取当前的clt，AtomicInteger类型保证线程安全
+        if (workerCountOf(c) < corePoolSize) {//如果当前运行的线程数小于核心线程数
+            if (addWorker(command, true))//如果添加核心线程数成功则方法返回
                 return;
-            c = ctl.get();
+            c = ctl.get();//执行到这里必定是添加核心线程失败，重新读取最新的clt
         }
+        
+        /**
+         * 这里分析一下添加核心态worker失败的几种场景：
+         * 1、线程池为shutdown以上的状态
+         * 2、当前线程池中运行的worker的数量超过其本身最大限制（2^29  -1 ）
+         * 3、当前线程池中运行的worker的数量超过corePoolSize
+         */
+        // 如果线程池处于running状态，则将当前提交的任务提交到内部的阻塞队列进行排队等待worker处理
         if (isRunning(c) && workQueue.offer(command)) {
             int recheck = ctl.get();
+            /**
+             * double check是否线程池仍在运行中
+             * 如果线程池不在running状态则将刚才进行排队的任务移除，并拒绝此次提交的任务
+             * 如果此时在线程池中运行的worker数量减少到0（corePoolSize为0的线程池在并发的情况下会出现此场景）
+             * 则添加一个不携带任何任务的非核心态的worker去处理刚才排队成功的任务
+             */
             if (! isRunning(recheck) && remove(command))
                 reject(command);
             else if (workerCountOf(recheck) == 0)
                 addWorker(null, false);
         }
-        else if (!addWorker(command, false))
+        else if (!addWorker(command, false))//如果排队失败（有界的阻塞队列）则添加一个非核心态的worker
+        	//添加失败：当前运行的worker数量超过maximumPoolSize或者本身最大的限制；线程池状态在shutdown以上
             reject(command);
     }
 
