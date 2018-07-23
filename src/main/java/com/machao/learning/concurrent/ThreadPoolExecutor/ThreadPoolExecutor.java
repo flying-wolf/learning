@@ -995,7 +995,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
      * @throws NullPointerException if {@code command} is null
      */
     public void execute(Runnable command) {
-    	// NPE检查，线程池不允许提交NULL任务
+    	// NULL检查，线程池不允许提交NULL任务
         if (command == null)
             throw new NullPointerException();
         /*
