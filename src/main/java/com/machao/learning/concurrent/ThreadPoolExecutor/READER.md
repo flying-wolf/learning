@@ -9,7 +9,13 @@
 >> 状态切换：调用了线程池得shutdown()方法时，线程池的状态由RUNNING ——> SHUTDOWN。
 > STOP
 >> 状态说明：线程池处于STOP状态时，不会接收新任务，也不会处理任务队列中的任务。
->> 
+>> 状态切换：调用了线程池的shutdownNow()方法时，线程池的状态由(RUNNING or SHUTDOWN) ——> STOP。
+> TIDYING
+>> 状态说明：所有任务已终止，ctl记录的任务数量为0，线程池会变为TIDYING状态。当线程池变为TIDYING状态时，会执行钩子函数terminated()。
+>> 状态切换：当线程池在SHUTDOWN状态下，任务队列为空并且线程池中执行的任务也为空时，就会由SHUTDOWN ——> TIDYING；当线程池在STOP状态下时，线程池中执行的任务为空时，就会由STOP ——> TIDYING。
+> TERMINATED
+>> 状态说明：线程池彻底终止，就会变成TERMINATED状态。
+>> 状态切换：线程池处在TIDYING状态时，执行完terminated()之后，就会由TIDYING ——> TERMINATED。
 
 ## 任务的执行
 
