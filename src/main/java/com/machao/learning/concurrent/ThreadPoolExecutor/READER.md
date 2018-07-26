@@ -18,6 +18,10 @@
 >> 状态切换：线程池处在TIDYING状态时，执行完terminated()之后，就会由TIDYING ——> TERMINATED。
 
 ## 任务的执行
+> 1. 使用ThreadPoolExecutor类创建线程池，它的构造函数参数如下：
+>> codePoolSize:核心线程数
+>> maximumPoolSize:最大线程数
+>> keepAliveTime:空闲线程存活时间
 
 ## 线程池中的线程初始化
 
