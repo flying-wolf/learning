@@ -19,9 +19,35 @@
 
 ## 任务的执行
 > 1. 使用ThreadPoolExecutor类创建线程池，它的构造函数参数如下：
+
 >> codePoolSize:核心线程数
+
 >> maximumPoolSize:最大线程数
+
 >> keepAliveTime:空闲线程存活时间
+
+>> unit:keepAliveTime的时间单位
+
+>> workQueue:任务队列，默认使用LinkedBlockingQueue
+>>> ArrayBlockingQueue:一个基于数组的有界的阻塞队列，按FIFO(先进先出)排序
+>>> LinkedBlockingQueue:一个基于链表的可选是否有界的阻塞队列，按FIFO(先进先出)排序
+>>> SynchronousQueue:一个不储存元素的阻塞队列，任何入队操作都要等待其它线程出队操作
+>>> PriorityBlockingQueue:一个基于数组结构并且具有优先级的无界阻塞
+
+>> threadFactory:创建线程的工厂，默认DefaultThreadFactory
+
+>> handler:饱和策略，默认策略为AbortPolicy
+>>> AbortPolicy:直接抛出异常
+>>> CallerRunsPolicy:使用调用者所在的线程来处理任务
+>>> DiscardOldestPolicy:丢弃任务队列最靠前的任务，并执行当前任务
+>>> DiscardPolicy:直接丢弃任务
+>>> RejectedExecutionHandler:自定义饱和策略
+
+> 2. 调用submit或者execute方法提交任务，具体执行过程如下：
+>>> 正在执行的线程数小于codePoolSize时，创建新线程来执行新提交的任务
+>>> 如果正在执行得线程数大于等于codePoolSize时，将新提交的任务放入workQueue中等待执行
+>>> 如果workQueue已满，且正在执行的线程小于maximumPoolSize时，创建新线程执行任务
+>>> 如果workQueue已满，且正在执行的线程大于等于maximumPoolSize时，执行饱和策略
 
 ## 线程池中的线程初始化
 
