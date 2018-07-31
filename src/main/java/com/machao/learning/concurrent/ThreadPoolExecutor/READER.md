@@ -47,10 +47,10 @@
 
 > 默认情况下，创建线程池之后，线程池中是没有线程的，需要提交任务后才会创建线程。
 当调用execute()方法添加一个线程时，线程池会做如下判断：
->> 1. 如果正在运行的线程数小于corePoolSize，则创建新的线程执行任务。
->> 2. 如果正在运行的线程数大于等于corePoolSize，则将这个任务放入任务队列中等待执行。
->> 3. 如果任务队列满了，而且正在运行的线程数小于maximumPoolSize，则再创建非核心线程执行任务。
->> 4. 如果任务队列满了，而且正在运行的线程数大于等于maximumPoolSize，则线程池会执行饱和策略（默认策略是直接抛出异常RejectExecutionException）。
+	>> 1. 如果正在运行的线程数小于corePoolSize，则创建新的线程执行任务。
+	>> 2. 如果正在运行的线程数大于等于corePoolSize，则将这个任务放入任务队列中等待执行。
+	>> 3. 如果任务队列满了，而且正在运行的线程数小于maximumPoolSize，则再创建非核心线程执行任务。
+	>> 4. 如果任务队列满了，而且正在运行的线程数大于等于maximumPoolSize，则线程池会执行饱和策略（默认策略是直接抛出异常RejectExecutionException）。   
 > 当一个线程完成任务时，它会从任务队列中取下一个任务来执行。
 > 当一个线程空闲且当前运行的线程数大于corePoolSize时，超过一定的时间(keepAliveTime)时，这个线程就会被停掉。
 
@@ -111,42 +111,8 @@ SynchronousQueue是一个缓冲任务区为1的阻塞队列。
 
 
 ## 线程池的实现原理
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## 任务的执行
-1. 如果正在运行的线程数少于核心线程数(codePoolSize)，则创建新的线程执行任务。
-2. 如果正在执行的线程数达到核心线程数，且任务队列没满，则将任务放入任务队列中等待执行。
-3. 如果任务队列满了（PS: workQueue.offer(command)返回false），则再创建新的线程执行任务。
-4. 如果线程数达到了运行的最大线程数，则执行饱和策略。
-
-## 线程池中的线程初始化
-
-## 任务缓存队列及排队策略
-
-## 任务拒绝策略
-
-## 线程池的关闭
-
-## 线程池容量的动态调整
+- 在ThreadPoolExecutor中主要由Worker类来控制线程的复用。
+- Worker本身实现了Runnable接口，同时拥有一个thread，这个thread就是要开启的线程。
+- 在新建Worker对象时同时新建一个Thread对象，同时将Worker自己作为参数传入Thread，这样Thread的start()方法调用时，运行的实际上是Worker的run()方法，run()方法调用runWorker()方法。
+- runWorker()中，有个while循环，一直调用getTask()方法从workQueue(任务队列)中取出Runnable任务。
+- 因为workQueue是个阻塞队列，workQueue.take()得到如果时空，则进入等待状态直到workQueue有新的任务被加入时唤醒阻塞的线程；所以一般情况下Thread的run()方法就不会结束，而时不断执行从workQueue里取出的任务，这就达到了线程复用的原理。
