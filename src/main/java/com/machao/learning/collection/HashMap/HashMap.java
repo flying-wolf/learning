@@ -390,20 +390,22 @@ public class HashMap<K,V> extends AbstractMap<K,V>
         Node<K,V>[] tab; Node<K,V> p; int n, i;
         // 如果table为空，第一次put操作需要扩容
         if ((tab = table) == null || (n = tab.length) == 0)
-            n = (tab = resize()).length;
-        if ((p = tab[i = (n - 1) & hash]) == null)
+            n = (tab = resize()).length;// 初始化
+        if ((p = tab[i = (n - 1) & hash]) == null)//如果hash所在的桶为空直接put
             tab[i] = newNode(hash, key, value, null);
-        else {
+        else {// 如果桶不为空
             Node<K,V> e; K k;
             if (p.hash == hash &&
                 ((k = p.key) == key || (key != null && key.equals(k))))
-                e = p;
+                e = p;// 如果hash和key都相等直接覆盖
             else if (p instanceof TreeNode)
+            	//如果hash所在的桶上为红黑树，调用红黑树的putTreeVal方法
                 e = ((TreeNode<K,V>)p).putTreeVal(this, tab, hash, key, value);
-            else {
+            else {// 如果hash桶为链表
                 for (int binCount = 0; ; ++binCount) {
-                    if ((e = p.next) == null) {
+                    if ((e = p.next) == null) {// 找到链表的尾节点，插入新节点
                         p.next = newNode(hash, key, value, null);
+                        // 如果链表节点数大于等于阀值8，链表转红黑树
                         if (binCount >= TREEIFY_THRESHOLD - 1) // -1 for 1st
                             treeifyBin(tab, hash);
                         break;
@@ -480,19 +482,23 @@ public class HashMap<K,V> extends AbstractMap<K,V>
                     else if (e instanceof TreeNode) // //如果e是红黑树的类型，那么添加到红黑树中
                         ((TreeNode<K,V>)e).split(this, newTab, j, oldCap);
                     else { // preserve order
+                    	// lo链表，表示移动到扩容后hash桶数组的原位置
                         Node<K,V> loHead = null, loTail = null;
+                        // hi链表，表示移动到扩容后hash桶数组的原偏移量2倍的位置
                         Node<K,V> hiHead = null, hiTail = null;
                         Node<K,V> next;
                         do {
-                            next = e.next;
-                            if ((e.hash & oldCap) == 0) {
+                            next = e.next;// 将e.next赋值给next
+                            if ((e.hash & oldCap) == 0) {//如果Node节点的hash值和原hash桶数组的长度做与运算结果为0
+                            	// 封装lo链表
                                 if (loTail == null)
                                     loHead = e;
                                 else
                                     loTail.next = e;
                                 loTail = e;
                             }
-                            else {
+                            else {//如果Node节点的hash值和原hash桶数组的长度做与运算结果不为0
+                            	// 封装hi链表
                                 if (hiTail == null)
                                     hiHead = e;
                                 else
@@ -500,13 +506,15 @@ public class HashMap<K,V> extends AbstractMap<K,V>
                                 hiTail = e;
                             }
                         } while ((e = next) != null);
+                        // 将lo链表移动到原偏移量的桶上
                         if (loTail != null) {
                             loTail.next = null;
                             newTab[j] = loHead;
                         }
+                        // 将hi链表移动到原偏移量2倍的桶上
                         if (hiTail != null) {
                             hiTail.next = null;
-                            newTab[j + oldCap] = hiHead;
+                            newTab[j + oldCap] = hiHead;//
                         }
                     }
                 }
