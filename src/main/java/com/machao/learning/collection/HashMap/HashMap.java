@@ -376,57 +376,78 @@ public class HashMap<K,V> extends AbstractMap<K,V>
     }
 
     /**
-     * Implements Map.put and related methods
-     *
-     * @param hash hash for key
-     * @param key the key
-     * @param value the value to put
-     * @param onlyIfAbsent if true, don't change existing value
-     * @param evict if false, the table is in creation mode.
-     * @return previous value, or null if none
+     * 向HashMap中插入元素
+     * 1. 判断table数组为空，则需要进行初始化，调用resize()方法扩容
+     * 2. 根据键值key计算hash值得到要插入的数组索引i，并找到要插入的桶p，如果桶为null则直接插入新节点并执行步骤6，如果桶不为null则执行步骤3
+     * 3. 判断如果桶中第一个元素的key和要插入元素的key是否相同(hashCode和equals)，如果相同直接覆盖value，否则执行步骤4
+     * 4. 判断如果桶中存放的是一颗红黑树，则直接在红黑树中插入键值对，否则执行步骤5
+     * 5. 此时桶中存放的是个链表，遍历链表，如果key在链表中已存在则直接覆盖value，否则在链表尾部插入新节点并检查链表长度，如果链表长度大于8时，数组容量小于64执行扩容操作，数组容量大于64将链表转为红黑树
+     * 6. 插入成功后，判断实际存在的键值对数量size超过了扩容阀值threshold时进行扩容
      */
     final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
                    boolean evict) {
         Node<K,V>[] tab; Node<K,V> p; int n, i;
-        // 如果table为空，第一次put操作需要扩容
+        // 步骤1. tab为空则创建
+        // table未初始化或者长度为0，进行扩容
         if ((tab = table) == null || (n = tab.length) == 0)
-            n = (tab = resize()).length;// 初始化
+            n = (tab = resize()).length;
+        // 步骤2. 计算index，并对null值做处理
+        // (n - 1) & hash 计算出元素需要放在哪个桶中，并赋值给i
+        // 获取当前桶并赋值给p
+        // 如果桶为空，则直接创建新节点放入桶中
         if ((p = tab[i = (n - 1) & hash]) == null)//如果hash所在的桶为空直接put
             tab[i] = newNode(hash, key, value, null);
         else {// 如果桶不为空
             Node<K,V> e; K k;
+            // 步骤3. 如果节点key存在，直接覆盖value
+            // 比较桶中第一个元素(数组中的节点)的hash值相等，key相等
             if (p.hash == hash &&
                 ((k = p.key) == key || (key != null && key.equals(k))))
-                e = p;// 如果hash和key都相等直接覆盖
+                e = p;// 将第一个元素赋值给e，用e来记录
+            // 步骤4. 判断当前桶上存的是红黑树
+            // hash值不相等，即key不相等；为红黑树结点
             else if (p instanceof TreeNode)
-            	//如果hash所在的桶上为红黑树，调用红黑树的putTreeVal方法
+            	//放入树中
                 e = ((TreeNode<K,V>)p).putTreeVal(this, tab, hash, key, value);
-            else {// 如果hash桶为链表
+            // 步骤5. 当前桶中为链表结构
+            else {
+            	// 在链表尾部插入节点
                 for (int binCount = 0; ; ++binCount) {
-                    if ((e = p.next) == null) {// 找到链表的尾节点，插入新节点
+                	// 找到链表尾部
+                    if ((e = p.next) == null) {
+                    	// 在尾部插入新节点
                         p.next = newNode(hash, key, value, null);
                         // 如果链表节点数大于等于阀值8，链表转红黑树
                         if (binCount >= TREEIFY_THRESHOLD - 1) // -1 for 1st
-                            treeifyBin(tab, hash);
-                        break;
+                            treeifyBin(tab, hash);// 如果table容量大于64，链表转红黑树，如果table容量小于64则扩容
+                        break;// 跳出循环
                     }
+                    // 链表中节点的hash、key值和要插入的节点hash、key值都相等，此时节点存在需要更新
                     if (e.hash == hash &&
                         ((k = e.key) == key || (key != null && key.equals(k))))
-                        break;
+                        break;// 相等，跳出循环
+                    // 用于遍历桶中的链表，与前面的e = p.next组合，可以遍历链表
                     p = e;
                 }
             }
+            // 当前节点e = p.next不为null，表示链表中原本存在相同的key
             if (e != null) { // existing mapping for key
+            	// 记录e的value
                 V oldValue = e.value;
+                // 当onlyIfAbsent为false或者旧值为null时决定key相同节点的值需要替换
                 if (!onlyIfAbsent || oldValue == null)
-                    e.value = value;
-                afterNodeAccess(e);
-                return oldValue;
+                    e.value = value;// 替换旧值
+                afterNodeAccess(e);// 回调函数
+                return oldValue;// 返回旧值
             }
         }
+        // 结构性修改计数累加
         ++modCount;
+        // 步骤6. 超过最大容量需要扩容
+        // 实际大小超过扩容阀值时，调用resize方法扩容
         if (++size > threshold)
             resize();
+        // 插入后的回调函数
         afterNodeInsertion(evict);
         return null;
     }
@@ -529,9 +550,10 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      */
     final void treeifyBin(Node<K,V>[] tab, int hash) {
         int n, index; Node<K,V> e;
+        // 如果当前table数组容量小于64则直接扩容
         if (tab == null || (n = tab.length) < MIN_TREEIFY_CAPACITY)
             resize();
-        else if ((e = tab[index = (n - 1) & hash]) != null) {
+        else if ((e = tab[index = (n - 1) & hash]) != null) {// 如果table数组容量大于等于64且需要转换的桶位不为空
             TreeNode<K,V> hd = null, tl = null;
             do {
                 TreeNode<K,V> p = replacementTreeNode(e, null);
