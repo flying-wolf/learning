@@ -175,44 +175,32 @@ public class HashMap<K,V> extends AbstractMap<K,V>
     /* ---------------- Fields -------------- */
 
     /**
-     * The table, initialized on first use, and resized as
-     * necessary. When allocated, length is always a power of two.
-     * (We also tolerate length zero in some operations to allow
-     * bootstrapping mechanics that are currently not needed.)
+     * 储存Node节点的数组
      */
     transient Node<K,V>[] table;
 
     /**
-     * Holds cached entrySet(). Note that AbstractMap fields are used
-     * for keySet() and values().
+     * 储存HashMap中所有键值对的集合
      */
     transient Set<Map.Entry<K,V>> entrySet;
 
     /**
-     * The number of key-value mappings contained in this map.
+     * HashMap中元素数量
      */
     transient int size;
 
     /**
-     * The number of times this HashMap has been structurally modified
-     * Structural modifications are those that change the number of mappings in
-     * the HashMap or otherwise modify its internal structure (e.g.,
-     * rehash).  This field is used to make iterators on Collection-views of
-     * the HashMap fail-fast.  (See ConcurrentModificationException).
+     * 结构性修改计数器
      */
     transient int modCount;
 
     /**
      * 扩容阀值，当HashMap中的节点数大于等于此值时要进行扩容操作.
-     *
-     * @serial
      */
     int threshold;
 
     /**
      * 加载因子，用于计算扩容阀值
-     *
-     * @serial
      */
     final float loadFactor;
 
@@ -330,22 +318,29 @@ public class HashMap<K,V> extends AbstractMap<K,V>
     }
 
     /**
-     * Implements Map.get and related methods
-     *
-     * @param hash hash for key
-     * @param key the key
-     * @return the node, or null if none
+     * 根据hash和key查找节点
+     * 流程：
+     * 1. 如果table未初始化或根据hash值找到的bucket为空则返回null，否则执行步骤2
+     * 2. 如果bucket中储存的第一个节点的key和要查找节点的key相同(hashCode && equals),返回bucket的第一个节点，否则执行步骤3
+     * 3. 如果bucket中只有一个节点，返回null，否则执行步骤4
+     * 4. 如果bucket中存储的是红黑树，则调用红黑树的getTreeNode()方法查找并返回，否则执行步骤5
+     * 5. bucket中存储的是链表，遍历链表找到key和要查找的key相同(hashCode && equals)的节点并返回
      */
     final Node<K,V> getNode(int hash, Object key) {
         Node<K,V>[] tab; Node<K,V> first, e; int n; K k;
+        //  判断table数组已经初始化，且根据hash值找到的桶(bucket)不为空
         if ((tab = table) != null && (n = tab.length) > 0 &&
             (first = tab[(n - 1) & hash]) != null) {
+        	// 判断bucket中第一个节点的hash与key和要查找的hash与key相等，则返回此节点
             if (first.hash == hash && // always check first node
                 ((k = first.key) == key || (key != null && key.equals(k))))
                 return first;
+            // 如果bucket中不止一个节点
             if ((e = first.next) != null) {
+            	// 判断如果bucket上存的是红黑树，则查找红黑树
                 if (first instanceof TreeNode)
                     return ((TreeNode<K,V>)first).getTreeNode(hash, key);
+                // 如果bucket上存的是链表，则查找链表
                 do {
                     if (e.hash == hash &&
                         ((k = e.key) == key || (key != null && key.equals(k))))
@@ -370,6 +365,9 @@ public class HashMap<K,V> extends AbstractMap<K,V>
 
     /**
      * 将指定的值与此映射中的指定键相关联。如果映射先前包含键的映射，则替换旧值
+     * 调用putVal()方法实现
+     * 流程：
+     * 
      */
     public V put(K key, V value) {
         return putVal(hash(key), key, value, false, true);
@@ -454,6 +452,18 @@ public class HashMap<K,V> extends AbstractMap<K,V>
 
     /**
      * 扩容函数
+     * 流程：
+     * 步骤1. 如果数组容量已达到最大容量(1 << 30)，则直接返回原数组
+     * 步骤2. 如果满足扩容条件，则将数组扩容1倍容量，然后执行步骤5
+     * 步骤3. 如果指定了容量且尚未初始化，则初始化并根据指定的容量和加载因子计算阀值
+     * 步骤4. 如果未指定容量且未初始化，则初始化并根据默认容量(16)和默认加载因子(0.75f)计算阀值
+     * 步骤5. 判断bucket中如果只有一个节点，则直接根据节点的hash值与新容量取模计算新位置
+     * 步骤6. 判断bucket中如果是一颗红黑树，则调用红黑树的split()方法将树拆分，否则执行步骤7
+     * 		split()流程：
+     * 		1). 遍历树中节点，根据节点的hash值和原容量取模计算将树拆分为两颗新树，一颗保持原来的桶位不变，另一颗树偏移到原容量2倍的原位置
+     * 		2). 分别判断拆分后的两颗树中节点数小于阀值6时将树转换为链表结构
+     * 		3). 将拆分后的两个树或链表放入新数组中对应的新位置
+     * 步骤7. bucket中是链表，遍历链表中所有节点，根据每个节点的hash值和原容量取模计算将链表拆分为两个新链表，一个保持原来桶位不变，另一个链表偏移到原容量2倍的原位置
      *
      * @return the table
      */
@@ -473,7 +483,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
                      oldCap >= DEFAULT_INITIAL_CAPACITY)
                 newThr = oldThr << 1; // double threshold
         }
-        else if (oldThr > 0) // 当前Map为空，构造时指定了初始容量(初始容量赋值给了阀值)，直接取初始容量
+        else if (oldThr > 0) // 当前k为空，构造时指定了初始容量(初始容量赋值给了阀值)，直接取初始容量
             newCap = oldThr;
         else {               // 当前Map为空，构造时使用默认容量和加载因子
             newCap = DEFAULT_INITIAL_CAPACITY;// 使用默认容量16
