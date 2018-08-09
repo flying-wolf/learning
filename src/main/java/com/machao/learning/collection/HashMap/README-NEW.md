@@ -131,7 +131,7 @@
 ```
 
 ### 插入操作
-![Image ./HashMap-PutValue.png]
+![插入操作流程图](./HashMap-PutValue.png)
 
 - 1. 如果HashMap没有初始化，则调用resize()方法初始化
 - 2. 根据要插入元素的hash值计算找出bucket位置(数组中的位置)
