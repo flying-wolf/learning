@@ -3,6 +3,7 @@ package com.machao.learning.collection.HashMap;
 public class Main {
 
 	public static void main(String[] args) {
+		System.out.println(2 >> 17);
 		int MAXIMUM_CAPACITY = 1 << 30;
 		int cap = 12;
 		int n = cap - 1;
