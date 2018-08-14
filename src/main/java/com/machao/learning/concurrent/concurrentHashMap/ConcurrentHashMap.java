@@ -1817,39 +1817,47 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
      * @param size number of elements (doesn't need to be perfectly accurate)
      */
     private final void tryPresize(int size) {
+    	// 给定的容量若>=MAXIMUM_CAPACITY的一半，直接扩容到允许的最大值，否则调用函数扩容 
         int c = (size >= (MAXIMUM_CAPACITY >>> 1)) ? MAXIMUM_CAPACITY :
             tableSizeFor(size + (size >>> 1) + 1);
         int sc;
         while ((sc = sizeCtl) >= 0) {
             Node<K,V>[] tab = table; int n;
+            // 如果table数组为空，则初始化table
             if (tab == null || (n = tab.length) == 0) {
-                n = (sc > c) ? sc : c;
+                n = (sc > c) ? sc : c; // 扩容阀值取较大者 
+                // CAS尝试将sizeCtl设置为-1，表示正在进行初始化
                 if (U.compareAndSwapInt(this, SIZECTL, sc, -1)) {
                     try {
                         if (table == tab) {
                             @SuppressWarnings("unchecked")
                             Node<K,V>[] nt = (Node<K,V>[])new Node<?,?>[n];
                             table = nt;
-                            sc = n - (n >>> 2);
+                            sc = n - (n >>> 2);// 计算扩容阀值
                         }
                     } finally {
-                        sizeCtl = sc;
+                        sizeCtl = sc; // 更新扩容阀值
                     }
                 }
             }
+            // 如果欲扩容值不大于原阀值，或现有容量达到最大值则跳出循环什么都不做
             else if (c <= sc || n >= MAXIMUM_CAPACITY)
                 break;
+            // table数组不为空且期间没有其他线程修改table
             else if (tab == table) {
                 int rs = resizeStamp(n);
+                // 如果有其他线程正在扩容，则帮助扩容
                 if (sc < 0) {
                     Node<K,V>[] nt;
                     if ((sc >>> RESIZE_STAMP_SHIFT) != rs || sc == rs + 1 ||
                         sc == rs + MAX_RESIZERS || (nt = nextTable) == null ||
                         transferIndex <= 0)
                         break;
+                    //辅助扩容操作，将sizeCtl加1，表示新增加一个线程辅助扩容
                     if (U.compareAndSwapInt(this, SIZECTL, sc, sc + 1))
                         transfer(tab, nt);
                 }
+                // 没有正在扩容table数组的线程，开始新的扩容
                 else if (U.compareAndSwapInt(this, SIZECTL, sc,
                                              (rs << RESIZE_STAMP_SHIFT) + 2))
                     transfer(tab, null);
@@ -1858,13 +1866,15 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
     }
 
     /**
-     * Moves and/or copies the nodes in each bin to new table. See
-     * above for explanation.
+     * 将table数组中的每个节点移动到新数组中
      */
     private final void transfer(Node<K,V>[] tab, Node<K,V>[] nextTab) {
         int n = tab.length, stride;
+        // 细分每个CPU处理最少16个数组长度的数组元素
         if ((stride = (NCPU > 1) ? (n >>> 3) / NCPU : n) < MIN_TRANSFER_STRIDE)
             stride = MIN_TRANSFER_STRIDE; // subdivide range
+        // 如果目标数组为null，则初始化一个table数组两倍长度的nextTab数组
+        // 只有第一个开始扩容的线程需要初始化目标数组
         if (nextTab == null) {            // initiating
             try {
                 @SuppressWarnings("unchecked")
@@ -1878,36 +1888,43 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
             transferIndex = n;
         }
         int nextn = nextTab.length;
+        // 创建一个ForwardingNode节点用来控制并发，当一个节点为空或已经被转移之后，就设置为ForwardingNode节点
+        // 表示空节点标识，其他线程遇到此节点直接跳过不处理
         ForwardingNode<K,V> fwd = new ForwardingNode<K,V>(nextTab);
-        boolean advance = true;
-        boolean finishing = false; // to ensure sweep before committing nextTab
+        boolean advance = true; // 是否继续向前查找的标识
+        boolean finishing = false; // 保证在提交扩容后的新数组时，原数组中的所有元素都已经被遍历
         for (int i = 0, bound = 0;;) {
             Node<K,V> f; int fh;
             while (advance) {
                 int nextIndex, nextBound;
+                //bound为数组区间下限值，i为当前转移数组的位置,--i处理转移下一个节点位置，从后往前处理
                 if (--i >= bound || finishing)
-                    advance = false;
+                    advance = false;// 跳出while循环
+                //表示原数组已经分割完了
                 else if ((nextIndex = transferIndex) <= 0) {
                     i = -1;
-                    advance = false;
+                    advance = false;// 跳出while循环
                 }
+                //CAS操作修改transferIndex值，代表下一个线程转移原数组的节点的位置
                 else if (U.compareAndSwapInt
                          (this, TRANSFERINDEX, nextIndex,
                           nextBound = (nextIndex > stride ?
                                        nextIndex - stride : 0))) {
-                    bound = nextBound;
-                    i = nextIndex - 1;
-                    advance = false;
+                    bound = nextBound; //设置当前线程转移原数组区间的下限值
+                    i = nextIndex - 1; //从后往前处理
+                    advance = false; //退出while循环
                 }
             }
             if (i < 0 || i >= n || i + n >= nextn) {
                 int sc;
+                // 如果扩容完成
                 if (finishing) {
-                    nextTable = null;
-                    table = nextTab;
-                    sizeCtl = (n << 1) - (n >>> 1);
+                    nextTable = null; // 将nextTable设置为null,标识当前扩容过程完成
+                    table = nextTab; // table指向扩容后的新数组
+                    sizeCtl = (n << 1) - (n >>> 1); // 将sizeCtl设置为正数，设置为原数组的3/2，即新数组的3/4
                     return;
                 }
+                // 如果最后一个线程完成扩容操作时，将finishing置为true，表示正确完成。
                 if (U.compareAndSwapInt(this, SIZECTL, sc = sizeCtl, sc - 1)) {
                     if ((sc - 2) != resizeStamp(n) << RESIZE_STAMP_SHIFT)
                         return;
@@ -1915,17 +1932,32 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
                     i = n; // recheck before commit
                 }
             }
+            // 如果当前桶为null，将ForwardingNode节点放入桶中，标识此节点已被处理
             else if ((f = tabAt(tab, i)) == null)
                 advance = casTabAt(tab, i, null, fwd);
+            // 如果当前桶已经被处理，直接跳过
             else if ((fh = f.hash) == MOVED)
                 advance = true; // already processed
+            // 如果当前hash桶需要处理，则将元素转移至新数组上
             else {
+            	// 锁住头结点
                 synchronized (f) {
-                    if (tabAt(tab, i) == f) {
+                    if (tabAt(tab, i) == f) {// 再次校验，防止hash被其他线程修改
                         Node<K,V> ln, hn;
-                        if (fh >= 0) {
+                        if (fh >= 0) { //如果是Node节点，说明是链表结构 
+                        	// hash值与原数组容量取模，结果为0则移动到新数组的原位置，否则移动到新数组的 原位置+数组长度 位置
                             int runBit = fh & n;
                             Node<K,V> lastRun = f;
+                            /*
+                             * lastRun 表示的是需要复制的最后一个节点
+                             * 每当新节点的hash&n -> b 发生变化的时候，就把runBit设置为这个结果b
+                             * 这样for循环之后，runBit的值就是最后不变的hash&n的值
+                             * 而lastRun的值就是最后一次导致hash&n 发生变化的节点(假设为p节点)
+                             * 为什么要这么做呢？因为p节点后面的节点的hash&n 值跟p节点是一样的，
+                             * 所以在复制到新的table的时候，它肯定还是跟p节点在同一个位置
+                             * 在复制完p节点之后，p节点的next节点还是指向它原来的节点，就不需要进行复制了，自己就被带过去了
+                             * 这也就导致了一个问题就是复制后的链表的顺序并不一定是原来的倒序
+                             */
                             for (Node<K,V> p = f.next; p != null; p = p.next) {
                                 int b = p.hash & n;
                                 if (b != runBit) {
@@ -1941,11 +1973,26 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
                                 hn = lastRun;
                                 ln = null;
                             }
+                            /*
+                             * 构造两个链表，顺序大部分和原来是反的
+                             * 分别放到原来的位置和新增加的长度的相同位置(i/n+i)
+                             */
                             for (Node<K,V> p = f; p != lastRun; p = p.next) {
                                 int ph = p.hash; K pk = p.key; V pv = p.val;
                                 if ((ph & n) == 0)
+                                	/*
+                                     * 假设runBit的值为0，
+                                     * 则第一次进入这个设置的时候相当于把旧的序列的最后一次发生hash变化的节点(该节点后面可能还有hash计算后同为0的节点)设置到旧的table的第一个hash计算后为0的节点下一个节点
+                                     * 并且把自己返回，然后在下次进来的时候把它自己设置为后面节点的下一个节点
+                                     */
+
                                     ln = new Node<K,V>(ph, pk, pv, ln);
                                 else
+                                	/*
+                                     * 假设runBit的值不为0，
+                                     * 则第一次进入这个设置的时候相当于把旧的序列的最后一次发生hash变化的节点(该节点后面可能还有hash计算后同不为0的节点)设置到旧的table的第一个hash计算后不为0的节点下一个节点
+                                     * 并且把自己返回，然后在下次进来的时候把它自己设置为后面节点的下一个节点
+                                     */
                                     hn = new Node<K,V>(ph, pk, pv, hn);
                             }
                             setTabAt(nextTab, i, ln);
