@@ -1867,6 +1867,18 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
 
     /**
      * 将table数组中的每个节点移动到新数组中
+     * 
+     * 流程：
+     * 步骤1. 控制每个CPU最少处理16个数组长度的元素
+     * 步骤2. 如果当前线程为第一个开始扩容的线程，则需要初始化一个两倍table大小的目标数组
+     * 步骤3. 创建一个ForwardingNode节点用来填充已被处理的节点
+     * 步骤4. 遍历table数组，将hash桶中的节点移动到目标数组
+     * 		1). 判断如果扩容已完成，将netxTable置为null并设置sizeCtl的值
+     * 		2). 如果当前hash桶为null，则将ForwardingNode节点放置该桶中，标识已处理
+     * 		3). 如果当前hash桶已被处理，则什么都不做
+     * 		4). 如果当前hash桶需要处理，则锁住头结点
+     * 		5). 如果当前桶中为链表结构，则利用每个节点的hash值与原容量取模将链表拆分为两个倒置的新链表移动到目标数组中
+     * 		6). 如果当前桶中为红黑树结构，则
      */
     private final void transfer(Node<K,V>[] tab, Node<K,V>[] nextTab) {
         int n = tab.length, stride;
@@ -2000,6 +2012,7 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
                             setTabAt(tab, i, fwd);
                             advance = true;
                         }
+                        // 如果hash桶中存储的是树
                         else if (f instanceof TreeBin) {
                             TreeBin<K,V> t = (TreeBin<K,V>)f;
                             TreeNode<K,V> lo = null, loTail = null;
@@ -2155,11 +2168,13 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
     private final void treeifyBin(Node<K,V>[] tab, int index) {
         Node<K,V> b; int n, sc;
         if (tab != null) {
+        	// 如果当前table数组长度小于64，直接扩容一倍
             if ((n = tab.length) < MIN_TREEIFY_CAPACITY)
                 tryPresize(n << 1);
+            // 当前哈希桶上为链表，将链表转为红黑树
             else if ((b = tabAt(tab, index)) != null && b.hash >= 0) {
-                synchronized (b) {
-                    if (tabAt(tab, index) == b) {
+                synchronized (b) {// 获取头结点的同步锁
+                    if (tabAt(tab, index) == b) {// 再次确认没有其他线程修改过
                         TreeNode<K,V> hd = null, tl = null;
                         for (Node<K,V> e = b; e != null; e = e.next) {
                             TreeNode<K,V> p =
