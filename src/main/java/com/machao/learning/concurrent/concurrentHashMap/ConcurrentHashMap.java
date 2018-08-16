@@ -318,7 +318,7 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
     private transient volatile int cellsBusy;
 
     /**
-     * 计数器表
+     * 计数器表，多线程更新{@baseCount}时竞争失败的值
      */
     private transient volatile CounterCell[] counterCells;
 
@@ -383,9 +383,15 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
     // Original (since JDK1.2) Map methods
 
     /**
-     * {@inheritDoc}
+     * 计算ConcurrentHashMap中键值对的数量
+     * 
+     * 累加baseCount与CounterCell数组中的值
+     * baseCount用来保存没有线程竞争情况下的键值对个数
+     * counterCell数组保存多线程更新baseCount时竞争失败的键值对个数
+     * 
      */
     public int size() {
+    	// 累加baseCount与CounterCell数组中的值
         long n = sumCount();
         return ((n < 0L) ? 0 :
                 (n > (long)Integer.MAX_VALUE) ? Integer.MAX_VALUE :
@@ -400,27 +406,30 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
     }
 
     /**
-     * Returns the value to which the specified key is mapped,
-     * or {@code null} if this map contains no mapping for the key.
-     *
-     * <p>More formally, if this map contains a mapping from a key
-     * {@code k} to a value {@code v} such that {@code key.equals(k)},
-     * then this method returns {@code v}; otherwise it returns
-     * {@code null}.  (There can be at most one such mapping.)
-     *
-     * @throws NullPointerException if the specified key is null
+     * 返回指定key映射节点的值
+     * 
+     * 流程：
+     * 步骤1. 如果数组为空或没有对应key的节点则返回null
+     * 步骤2. 如果hash桶中头结点是要查找的节点则返回头结点的值
+     * 步骤3. 如果hash桶中存储的是红黑树则查找树节点
+     * 步骤4. 如果hash桶中存储的是链表则查找链表节点
      */
     public V get(Object key) {
         Node<K,V>[] tab; Node<K,V> e, p; int n, eh; K ek;
+        // 计算hash值
         int h = spread(key.hashCode());
+        // table数组不为空，且计算并找到的hash桶位中有节点时
         if ((tab = table) != null && (n = tab.length) > 0 &&
             (e = tabAt(tab, (n - 1) & h)) != null) {
+        	// 头结点key与要查找的key相同(hashCode && equals)，则返回头结点
             if ((eh = e.hash) == h) {
                 if ((ek = e.key) == key || (ek != null && key.equals(ek)))
                     return e.val;
             }
+            // 如果是红黑树则查找红黑树节点
             else if (eh < 0)
                 return (p = e.find(h, key)) != null ? p.val : null;
+            // 如果是链表则查找链表节点
             while ((e = e.next) != null) {
                 if (e.hash == h &&
                     ((ek = e.key) == key || (ek != null && key.equals(ek))))
@@ -468,24 +477,24 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
         return false;
     }
 
-    /**
-     * Maps the specified key to the specified value in this table.
-     * Neither the key nor the value can be null.
-     *
-     * <p>The value can be retrieved by calling the {@code get} method
-     * with a key that is equal to the original key.
-     *
-     * @param key key with which the specified value is to be associated
-     * @param value value to be associated with the specified key
-     * @return the previous value associated with {@code key}, or
-     *         {@code null} if there was no mapping for {@code key}
-     * @throws NullPointerException if the specified key or value is null
-     */
     public V put(K key, V value) {
         return putVal(key, value, false);
     }
 
-    /** Implementation for put and putIfAbsent */
+    /**
+     * 插入键值对
+     * 
+     * 流程：
+     * 步骤1. 参数检查，key和value不允许为null
+     * 步骤2. 如果table数组未初始化，则初始化
+     * 步骤3. 计算并找到欲插入的键值对在table数组中的位置
+     * 步骤4. 如果hash桶中没有节点，则直接创建Node节点(无锁操作)
+     * 步骤5. 如果有其他线程正在扩容，则协助扩容
+     * 步骤6. hash桶中有节点，synchronized锁住头节点，并再次校验头结点hash，以防其他线程更新
+     * 步骤7. 如果桶中是链表结构，则遍历链表，有相同key的节点(hashCode & equals)直接覆盖value，没有相同节点创建新节点插入链表尾部，判断链表节点数大于8转为红黑树或扩容一倍容量
+     * 步骤8. 如果桶中是红黑树结构，则调用红黑树的方法追加节点
+     * 步骤9. 增加baseCount计数，过程中有可能需要扩容
+     */
     final V putVal(K key, V value, boolean onlyIfAbsent) {
     	// 步骤1. 参数非空检查，key或value如果为null，则抛出异常，否则执行步骤2
         if (key == null || value == null) throw new NullPointerException();
@@ -602,30 +611,35 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
         int hash = spread(key.hashCode());
         for (Node<K,V>[] tab = table;;) {
             Node<K,V> f; int n, i, fh;
+            // 如果table数组为空或查找到的节点为null则直接返回null
             if (tab == null || (n = tab.length) == 0 ||
                 (f = tabAt(tab, i = (n - 1) & hash)) == null)
                 break;
+            // 如果有其它线程正在扩容，则协助扩容
             else if ((fh = f.hash) == MOVED)
                 tab = helpTransfer(tab, f);
             else {
                 V oldVal = null;
                 boolean validated = false;
+                // 锁住头结点，并再次校验是否有其他线程更新头结点
                 synchronized (f) {
                     if (tabAt(tab, i) == f) {
+                    	// 如果是链表节点
                         if (fh >= 0) {
                             validated = true;
                             for (Node<K,V> e = f, pred = null;;) {
                                 K ek;
+                                // 遍历链表找到key与欲删除的key相同的节点
                                 if (e.hash == hash &&
                                     ((ek = e.key) == key ||
                                      (ek != null && key.equals(ek)))) {
-                                    V ev = e.val;
+                                    V ev = e.val; // 将此节点的value赋值给ev
                                     if (cv == null || cv == ev ||
                                         (ev != null && cv.equals(ev))) {
                                         oldVal = ev;
                                         if (value != null)
                                             e.val = value;
-                                        else if (pred != null)
+                                        else if (pred != null)//
                                             pred.next = e.next;
                                         else
                                             setTabAt(tab, i, e.next);
@@ -637,6 +651,8 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
                                     break;
                             }
                         }
+                        
+                        // 红黑树
                         else if (f instanceof TreeBin) {
                             validated = true;
                             TreeBin<K,V> t = (TreeBin<K,V>)f;
@@ -656,6 +672,7 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
                         }
                     }
                 }
+                // 重新调整计数器的值
                 if (validated) {
                     if (oldVal != null) {
                         if (value == null)
@@ -1741,21 +1758,18 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
     }
 
     /**
-     * Adds to count, and if table is too small and not already
-     * resizing, initiates transfer. If already resizing, helps
-     * perform transfer if work is available.  Rechecks occupancy
-     * after a transfer to see if another resize is already needed
-     * because resizings are lagging additions.
-     *
-     * @param x the count to add
-     * @param check if <0, don't check resize, if <= 1 only check if uncontended
+     * 增加计数
+     * 1. 更新baseCount的值
+     * 2. 检查是否需要扩容
      */
     private final void addCount(long x, int check) {
         CounterCell[] as; long b, s;
+        // CAS更新baseCount的值
         if ((as = counterCells) != null ||
             !U.compareAndSwapLong(this, BASECOUNT, b = baseCount, s = b + x)) {
             CounterCell a; long v; int m;
             boolean uncontended = true;
+            // 多线程修改baseCount值时，竞争失败的线程会调用fullAddCount方法将值插入到counterCell数组中
             if (as == null || (m = as.length - 1) < 0 ||
                 (a = as[ThreadLocalRandom.getProbe() & m]) == null ||
                 !(uncontended =
@@ -1767,6 +1781,7 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
                 return;
             s = sumCount();
         }
+        //如果check值大于等于0 则需要检验是否需要进行扩容操作
         if (check >= 0) {
             Node<K,V>[] tab, nt; int n, sc;
             while (s >= (long)(sc = sizeCtl) && (tab = table) != null &&
@@ -1777,9 +1792,11 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
                         sc == rs + MAX_RESIZERS || (nt = nextTable) == null ||
                         transferIndex <= 0)
                         break;
+                    // 如果有其它线程正在进行扩容操作，则协助扩容
                     if (U.compareAndSwapInt(this, SIZECTL, sc, sc + 1))
                         transfer(tab, nt);
                 }
+                // 当前线程是唯一的或是第一个发起扩容的线程  此时nextTable=null 
                 else if (U.compareAndSwapInt(this, SIZECTL, sc,
                                              (rs << RESIZE_STAMP_SHIFT) + 2))
                     transfer(tab, null);
@@ -1812,9 +1829,12 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
     }
 
     /**
-     * Tries to presize table to accommodate the given number of elements.
-     *
-     * @param size number of elements (doesn't need to be perfectly accurate)
+     * 扩容操作
+     * 
+     * 步骤1. 如果当前数组长度大于允许扩容的最大容量一半时，直接扩容至允许的最大容量
+     * 步骤2. 如果table数组为空，则CAS操作将sizeCtl设置为-1，然后初始化table数组
+     * 步骤3. 如果欲扩容值小于原扩容阀值或现有容量已经是允许的最大容量，则什么都不做结束扩容
+     * 步骤4. 如果已经有其他线程正在扩容，则协助其它线程扩容，否则开启新扩容
      */
     private final void tryPresize(int size) {
     	// 给定的容量若>=MAXIMUM_CAPACITY的一半，直接扩容到允许的最大值，否则调用函数扩容 
@@ -1866,19 +1886,21 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
     }
 
     /**
-     * 将table数组中的每个节点移动到新数组中
+     * 辅助扩容操作，将table数组中的每个节点移动到新数组中
      * 
-     * 流程：
-     * 步骤1. 控制每个CPU最少处理16个数组长度的元素
-     * 步骤2. 如果当前线程为第一个开始扩容的线程，则需要初始化一个两倍table大小的目标数组
-     * 步骤3. 创建一个ForwardingNode节点用来填充已被处理的节点
-     * 步骤4. 遍历table数组，将hash桶中的节点移动到目标数组
-     * 		1). 判断如果扩容已完成，将netxTable置为null并设置sizeCtl的值
-     * 		2). 如果当前hash桶为null，则将ForwardingNode节点放置该桶中，标识已处理
-     * 		3). 如果当前hash桶已被处理，则什么都不做
-     * 		4). 如果当前hash桶需要处理，则锁住头结点
-     * 		5). 如果当前桶中为链表结构，则利用每个节点的hash值与原容量取模将链表拆分为两个倒置的新链表移动到目标数组中
-     * 		6). 如果当前桶中为红黑树结构，则
+     * 整个扩容分为两部分
+     * 第一部分：构建一个原数组两倍大小的目标数组nextTable，这个操作是单线程完成的。
+     * 第二部分：将原table数组中的元素复制到目标数组nextTable中，此步允许多线程操作。
+     * 
+     * 复制过程中的单线程操作流程：
+     * 步骤1. 如果hash桶为空，则在桶中放入ForwardingNode节点，标识当前节点已被处理。
+     * 步骤2. 如果hash桶是一个链表的头结点，则做反序处理，把他们分别放在目标数组的i和i+n位置上，在当前hash桶放在ForwardingNode节点。
+     * 步骤3. 如果hash桶是一个红黑树节点，则做反序处理，并且判断是否需要转为链表，把处理的结果放在目标数组的i和i+n位置上，在当前hash桶放在ForwardingNode节点。
+     * 步骤4. 复制工作完成后，将目标数组作为新的table数组，并且更新sizeCtl为新容量的0.75倍，完成扩容。
+     * 
+     * 多线程扩容的线程安全问题：
+     * 每个线程处理完一个节点后，就把对应的节点设置为ForwardingNode节点。
+     * 当其其它线程遍历到节点为ForwardingNode节点时，就跳过向后继续遍历，再加上头结点加锁机制，就很好的解决了线程安全问题。
      */
     private final void transfer(Node<K,V>[] tab, Node<K,V>[] nextTab) {
         int n = tab.length, stride;
@@ -2039,6 +2061,7 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
                                     ++hc;
                                 }
                             }
+                            // 如果树中元素小于等于6转为链表
                             ln = (lc <= UNTREEIFY_THRESHOLD) ? untreeify(lo) :
                                 (hc != 0) ? new TreeBin<K,V>(lo) : t;
                             hn = (hc <= UNTREEIFY_THRESHOLD) ? untreeify(hi) :
