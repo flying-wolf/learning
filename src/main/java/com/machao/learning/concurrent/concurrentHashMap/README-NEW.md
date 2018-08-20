@@ -183,7 +183,7 @@
     }
 ```
 ### 插入操作
-![插入操作流程图](./ConcurrentHashMap-PutValue.png)
+![插入操作流程图](./ConcurrentHashMap-PutVal.png)
 
 > 1. 参数检查，key或value为null抛异常NullPointerException();    
 > 2. 如果table为空(未初始化),则初始化；   
