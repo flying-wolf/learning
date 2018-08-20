@@ -411,7 +411,8 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
      * 流程：
      * 步骤1. 如果数组为空或没有对应key的节点则返回null
      * 步骤2. 如果hash桶中头结点是要查找的节点则返回头结点的值
-     * 步骤3. 如果hash桶中存储的是红黑树则查找树节点
+     * 步骤3. 如果hash值为-1(MOVED)，当前桶中为ForwardingNode节点，说明正在扩容，则遍历nextTable数组查找节点
+     * 步骤3. 如果hash值为-2(TREEBIN)，当前桶中为红黑树节点，则查找树节点
      * 步骤4. 如果hash桶中存储的是链表则查找链表节点
      */
     public V get(Object key) {
@@ -426,7 +427,8 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
                 if ((ek = e.key) == key || (ek != null && key.equals(ek)))
                     return e.val;
             }
-            // 如果是红黑树则查找红黑树节点
+            // eh < 0 有两种情况，如果为MOVED(-1)表示正在扩容，则遍历nextTable数组查找节点
+            // 如果为TREEBIN(-2)表示为红黑树，则查找红黑树
             else if (eh < 0)
                 return (p = e.find(h, key)) != null ? p.val : null;
             // 如果是链表则查找链表节点
