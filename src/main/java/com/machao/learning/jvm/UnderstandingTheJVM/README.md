@@ -114,11 +114,55 @@
 
 1. Serial收集器（串行收集器）   
 	新生代收集器，采用复制算法   
-	单线程执行   
+	单线程执行,进行垃圾回收时必须暂停掉所有工作线程      
 	垃圾收集时会产生停顿（Stop The World），随着HotSpot优化STW时间在缩短但不会消失    
-	简单高效，对单核CPU环境无线程交互开销，可获得最高单线程收集效率，堆Client模式虚拟机时很好的选择    
+	简单高效，对单核CPU环境无线程交互开销，可获得最高单线程收集效率，对Client模式虚拟机时很好的选择    
 	
-2. ParNew收集器（并行收集器）   
+2. ParNew收集器（并行收集器）  
+	新生代收集器，采用复制算法   
+	多线程执行，其就是serial收集器的多线程版本   
+	控制参数（如：-XXSurvivorRatio、-XXPretenureSizeThreshold、-XXHandlePromotionFailure等）、收集算法、STW、对象分配规则、回收策略等与Serial相同（两者共用很多代码）  
+	Server模式虚拟机首选新生代收集器（原因之一是除了Serial收集器之外只有ParNew收集器能与CMS收集器搭配使用）    
+	默认开启线程数量=CPU个数，可用-XXParallelGCThreads参数限制线程数    
+	使用-XX+UseConMarkSweepGC后默认的新生代收集器，可使用-XX+UseParNewGC强制指定    
+	
+3. Parallel Scavenge收集器（并行收集器）   
+	新生代收集器，采用复制算法    
+	多线程执行   
+	Parallel Scavenge收集器的目标是达到一个可控制的吞吐量（Throughput），吞吐量=运行用户代码时间/（运行用户代码时间+垃圾收集时间），比如虚拟机总共运行了100分钟，其中垃圾收集花了1分钟，那么吞吐量为99%    
+	短停顿时间适合与用户交互程序，高吞吐量可高效利用CPU时间，适合后台运算任务程序    
+	参数： 
+		-XXMaxGCPauseMillis，设置最大垃圾收集停顿时间，大于0的毫秒数，缩短停顿时间是以牺牲吞吐量和新生代空间实现的     
+		-XXGCTimeRatio，设置吞吐量大小，大于0小于100的整数        
+		-XX+UseAdaptiveSizePolicy，打开GC自适应调节策略，打开后，不需指定新生代大小（-Xmn）、Eden与Survivor比例（-XXSurvivorRatio）、晋升老年代对象年龄（-XXPretenureSizeThreshold）等细节参数     
 
 
+4. Serial Old收集器（串行收集器）    
+	老年代收集器，采用“标记-整理”算法    
+	单线程执行    
+	主要适合Client模式虚拟机使用    
+	Server模式下2大用途：    
+		1). 在JDK1.5及之前版本中与Parallel Scavenge收集器搭配使用    
+		2). 作为CMS收集器的后备预案，在并发收集发生Concurrent Mode Failure时使用    
+
+
+5. Parallel Old收集器（并行收集器）    
+	老年代收集器，采用“标记-整理”算法   
+	多线程执行   
+	JDK1.6开始提供，在此之前若新生代选择Parallel Scavenge收集器老年代只有Serial Old可选    
+	Serial Old在服务端性能较差（单线程无法充分利用多CPU处理能力），与Parallel Scaveng搭配整体上不能获得最大化吞吐量，在老年代很大且硬件较高级环境，以上组合吞吐量可能不如ParNew+CMS组合 
+	在注重吞吐量、CPU资源敏感场合，可优先考虑Parallel Scavenge+Parallel Old组合    
+	
+6. CMS（Concurrent Mark Sweep）收集器（并行收集器）    
+	老年代收集器，采用“标记-清除”算法   
+	多线程执行    
+	CMS收集器目标：获取最短回收停顿时间 
+	运行的4个步骤：    
+		1). 初始标记（CMS initial mark），只标记GC Roots能直接关联到的对象，需要“Stop The World”，但时间很短    
+		2). 并发标记（CMS concurrent mark），进行GC Roots Tracing的过程，不需要STW    
+		3). 重新标记（CMS remark），修正并发标记期间因用户程序继续运作而导致标记产生的那一部分对象的标记记录，需要“Stop The World”，时间比初始标记阶段稍长，但比并发标记时间短很多     
+		4). 并发清除（CMS concurrent sweep）
+	   
+	
+	
 
