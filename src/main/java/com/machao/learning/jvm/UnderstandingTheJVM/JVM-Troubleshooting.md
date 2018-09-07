@@ -8,13 +8,16 @@
 | 性能             | jstat           | 查看ClassLoader，Complier，GC相关信息，可实时监控资源和性能。             |    
 
 ## 1. jps命令（查找JVM的进程ID）   
-```
+```shell
 # 附带jvm参数信息
 jps -v
+
 # 只显示id
 jps -q
-#输出main method的参数
+
+# 输出main method的参数
 jps -m
-#输出完全的包名，应用主类名，jar的完全路径
+
+# 输出完全的包名，应用主类名，jar的完全路径
 jps -l
 ```
