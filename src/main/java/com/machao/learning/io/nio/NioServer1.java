@@ -25,7 +25,7 @@ public class NioServer1 {
 		server.register(sel, SelectionKey.OP_ACCEPT);
 		System.out.println("服务端已启动，监听端口是：" + this.port);
 	}
-	
+
 	public void listener() throws Exception {
 		while(true) {
 			int wait = sel.select();
@@ -45,8 +45,8 @@ public class NioServer1 {
 		
 	}
 	
-	public static void main(String[] args) {
-		
+	public static void main(String[] args) throws Exception {
+		new NioServer1(1234).listener();
 	}
 
 }
